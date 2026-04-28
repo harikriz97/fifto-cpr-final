@@ -14,8 +14,14 @@ venv/
 env/
 .venv/
 
-# Data outputs (backtest CSVs, charts — large files, not for repo)
-data/
+# Data outputs — exclude dated session folders, include master trades CSV
+data/2026*/
+data/2025*/
+data/2024*/
+data/2023*/
+data/2022*/
+data/2021*/
+# Keep: data/56_combined_trades.csv (all backtest trades)
 
 # Logs
 *.log
