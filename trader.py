@@ -170,10 +170,17 @@ def compute_signal(setup: dict, spot_open: float) -> dict:
 
 # ── Monitor loop (shared by v17a + intraday v2) ────────────────────
 def monitor_trade(angel, oa, symbol, token, state: TradeState,
-                  sl_type, dry_run):
+                  sl_type, dry_run, lots: int = 0, ep: float = 0.0):
     eod = datetime.now().replace(hour=15, minute=20, second=0, microsecond=0)
     api_errors = 0
     MAX_API_ERRORS = 5
+
+    # Partial exit: book 1 lot at 25% profit, let rest run
+    PARTIAL_PCT      = 0.25
+    partial_threshold = r2(ep * (1 - PARTIAL_PCT)) if ep > 0 else None
+    partial_done     = False
+    partial_pnl      = 0.0
+    lots_remaining   = lots if lots > 0 else config.LOT_SIZE
 
     while True:
         time.sleep(POLL_SECS)
@@ -191,10 +198,23 @@ def monitor_trade(angel, oa, symbol, token, state: TradeState,
                 break
             continue
 
+        # ── Partial exit: 25% profit, only if holding more than 1 lot ──
+        if (partial_threshold and not partial_done
+                and lots_remaining > config.LOT_SIZE
+                and cp <= partial_threshold):
+            partial_pnl = r2((ep - cp) * config.LOT_SIZE)
+            log.info(f"PARTIAL EXIT (25%) {symbol}  cp={cp}  "
+                     f"partial_pnl=₹{partial_pnl:,.0f}  "
+                     f"lots_remaining={lots_remaining - config.LOT_SIZE}")
+            if not dry_run:
+                oa.squareoff(symbol, config.LOT_SIZE)
+            partial_done    = True
+            lots_remaining -= config.LOT_SIZE
+
         if now >= eod:
             state.eod_exit(cp)
             log.info(f"EOD exit {symbol}  cp={cp}  pnl=₹{state.pnl:,.0f}")
-            if not dry_run: oa.squareoff(symbol, config.LOT_SIZE)
+            if not dry_run: oa.squareoff(symbol, lots_remaining)
             break
 
         act, reason = state.update(cp, spot)
@@ -204,8 +224,12 @@ def monitor_trade(angel, oa, symbol, token, state: TradeState,
 
         if act == 'exit':
             log.info(f"Exit [{reason}] {symbol}  cp={cp}  pnl=₹{state.pnl:,.0f}")
-            if not dry_run: oa.squareoff(symbol, config.LOT_SIZE)
+            if not dry_run: oa.squareoff(symbol, lots_remaining)
             break
+
+    # Total P&L = partial lot booked + remaining lots at final exit
+    remaining_mult  = lots_remaining // config.LOT_SIZE
+    state.total_pnl = r2(partial_pnl + state.pnl * remaining_mult)
 
 
 # ── v17a morning trade ─────────────────────────────────────────────
@@ -246,12 +270,13 @@ def run_v17a(angel, oa, ctx, dry_run):
              f"  sl={state.hard_sl}  spot_sl={spot_sl}  lots={lots}")
     if not dry_run: oa.place_sell_order(symbol, lots)
 
-    monitor_trade(angel, oa, symbol, token, state, sl_type, dry_run)
+    monitor_trade(angel, oa, symbol, token, state, sl_type, dry_run,
+                  lots=lots, ep=ep)
 
     log_trade(source='v17a', zone=ctx['zone'], bias=ctx['bias'],
               opt=ctx['signal'], symbol=symbol,
               entry_price=ep, exit_price=state.exit_price,
-              exit_reason=state.exit_reason, pnl=state.pnl, dte=dte)
+              exit_reason=state.exit_reason, pnl=state.total_pnl, dte=dte)
 
 
 # ── Intraday v2 scan ───────────────────────────────────────────────
@@ -310,12 +335,13 @@ def run_intraday_v2(angel, oa, ctx, dry_run):
              f"  sl={state.hard_sl}  DTE={dte}  lots={lots}")
     if not dry_run: oa.place_sell_order(symbol, lots)
 
-    monitor_trade(angel, oa, symbol, token, state, 'pct', dry_run)
+    monitor_trade(angel, oa, symbol, token, state, 'pct', dry_run,
+                  lots=lots, ep=ep)
 
     log_trade(source='intraday_v2', zone=f"{brk['level_name']}_break", bias='—',
               opt=brk['opt'], symbol=symbol,
               entry_price=ep, exit_price=state.exit_price,
-              exit_reason=state.exit_reason, pnl=state.pnl, dte=dte)
+              exit_reason=state.exit_reason, pnl=state.total_pnl, dte=dte)
 
 
 # ── Main ───────────────────────────────────────────────────────────
