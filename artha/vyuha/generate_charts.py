@@ -22,20 +22,20 @@ from my_util import load_spot_data, load_tick_data, list_expiry_dates, list_trad
 import pandas as pd, numpy as np
 
 ZONE_TAMIL = {
-    'above_r4':'vaanam','r3_to_r4':'malai','r2_to_r3':'uyarvu',
-    'r1_to_r2':'medu','pdh_to_r1':'veli','tc_to_pdh':'kadai',
-    'within_cpr':'nadu','pdl_to_bc':'adikadai','pdl_to_s1':'irakku',
-    's1_to_s2':'keezhveli','s2_to_s3':'aazham','s3_to_s4':'kuzhi',
-    'below_s4':'paatalam',
+    'above_r4':'thor','r3_to_r4':'ironman','r2_to_r3':'captainmarvel',
+    'r1_to_r2':'spiderman','pdh_to_r1':'blackpanther','tc_to_pdh':'hawkeye',
+    'within_cpr':'vision','pdl_to_bc':'antman','pdl_to_s1':'blackwidow',
+    's1_to_s2':'hulk','s2_to_s3':'wintersoldier','s3_to_s4':'loki',
+    'below_s4':'thanos',
 }
 ZONE_DISPLAY = {
-    'above_r4':'Vaanam (வானம்)','r3_to_r4':'Malai (மலை)',
-    'r2_to_r3':'Uyarvu (உயர்வு)','r1_to_r2':'Medu (மேடு)',
-    'pdh_to_r1':'Veli (வேலி)','tc_to_pdh':'Kadai (கடை)',
-    'within_cpr':'Nadu (நடு)','pdl_to_bc':'Adikadai (அடிகடை)',
-    'pdl_to_s1':'Irakku (இறக்கு)','s1_to_s2':'Keezhveli (கீழ்வேலி)',
-    's2_to_s3':'Aazham (ஆழம்)','s3_to_s4':'Kuzhi (குழி)',
-    'below_s4':'Paatalam (பாதாளம்)',
+    'above_r4':'Thor (above R4)','r3_to_r4':'Iron Man (R3-R4)',
+    'r2_to_r3':'Captain Marvel (R2-R3)','r1_to_r2':'Spider-Man (R1-R2)',
+    'pdh_to_r1':'Black Panther (PDH-R1)','tc_to_pdh':'Hawkeye (TC-PDH)',
+    'within_cpr':'Vision (CPR)','pdl_to_bc':'Ant-Man (PDL-BC)',
+    'pdl_to_s1':'Black Widow (PDL-S1)','s1_to_s2':'Hulk (S1-S2)',
+    's2_to_s3':'Winter Soldier (S2-S3)','s3_to_s4':'Loki (S3-S4)',
+    'below_s4':'Thanos (below S4)',
 }
 
 BG   = '#0d1117'
