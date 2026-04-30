@@ -94,10 +94,13 @@ ohlc['asc_cpr']   = ((ohlc['prev_mid'] > ohlc['prev2_mid']) &
 ohlc['desc_cpr']  = ((ohlc['prev_mid'] < ohlc['prev2_mid']) &
                      (ohlc['prev2_mid'] < ohlc['prev3_mid'])).astype(int)
 
-# === NEGATIVE FILTER: inside_cpr ===
-# Today's CPR fits inside yesterday's CPR → trending day → option sellers beware
+# === NEGATIVE FILTER: inside_cpr (no forward bias) ===
+# Does TODAY's CPR fit inside YESTERDAY's CPR?
+# Today's CPR  = prev_tc (shift1), prev_bc (shift1) — based on yesterday's H,L,C ✓
+# Yesterday's CPR = tc.shift(2), bc.shift(2) — based on day-before data ✓
 ohlc['inside_cpr'] = (
-    (ohlc['tc'] < ohlc['prev_tc']) & (ohlc['bc'] > ohlc['prev_bc'])
+    (ohlc['tc'].shift(1) < ohlc['tc'].shift(2)) &
+    (ohlc['bc'].shift(1) > ohlc['bc'].shift(2))
 ).astype(int)
 
 # === VIX ===
