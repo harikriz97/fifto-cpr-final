@@ -16,7 +16,7 @@ OPENALGO_API_KEY    = "YOUR_OPENALGO_API_KEY"
 OPENALGO_STRATEGY   = "V17A_CPR_PAPER"
 
 # ── Strategy constants ─────────────────────────────────────────────
-LOT_SIZE    = 75
+LOT_SIZE    = 65
 STRIKE_INT  = 50
 EMA_PERIOD  = 20
 EOD_EXIT    = "15:20:00"
