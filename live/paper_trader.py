@@ -116,8 +116,17 @@ def pre_market_setup(client: AngelClient, state: DayState):
     logger.info(f"  OHLC fetched: {len(ohlc)} days, last={ohlc.iloc[-1]['date']}")
 
     # ── Compute CPR / Cam / MRC from previous day ─────────────────────────────
-    prev = ohlc.iloc[-1]   # previous trading day (today not yet in daily OHLC)
+    # Skip today's partial bar if present (open==close or date==today)
+    today_str = datetime.today().strftime("%Y%m%d")
+    last_date = str(ohlc.iloc[-1]["date"])
+    if last_date >= today_str or float(ohlc.iloc[-1]["open"]) == float(ohlc.iloc[-1]["close"]):
+        prev = ohlc.iloc[-2]   # use day before
+    else:
+        prev = ohlc.iloc[-1]
     ph, pl, pc = float(prev["high"]), float(prev["low"]), float(prev["close"])
+    state._prev_open  = float(prev["open"])
+    state._prev_close = float(prev["close"])
+    logger.info(f"  Prev day: {prev['date']}  O={state._prev_open} C={state._prev_close}")
 
     state.pdh  = ph
     state.pdl  = pl
@@ -238,8 +247,8 @@ def on_ib_confirmed(client: AngelClient, state: DayState):
         ema20=float(state.ema20 or 0.0),
         today_open=today_open,
         fut_basis_pts=state.fut_basis_pts,
-        prev_close=float(prev_row["close"]) if prev_row is not None else 0.0,
-        prev_open=float(prev_row["open"])   if prev_row is not None else 0.0,
+        prev_close=getattr(state, "_prev_close", float(prev_row["close"]) if prev_row is not None else 0.0),
+        prev_open=getattr(state,  "_prev_open",  float(prev_row["open"])  if prev_row is not None else 0.0),
         vix_today=getattr(state, "_vix_today", 0.0),
         vix_ma20=getattr(state,  "_vix_ma20",  15.0),
         dte=getattr(state, "_dte", 4),
