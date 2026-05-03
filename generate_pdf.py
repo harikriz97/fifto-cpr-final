@@ -408,6 +408,49 @@ def make_agent_emblem(name, color_hex, letter, accent="circle"):
     return buf
 
 
+def make_cover_equity(df):
+    """Minimal equity curve for cover — dark bg, gold line, clean."""
+    with plt.rc_context(MPL_STYLE):
+        fig, ax = plt.subplots(figsize=(10.5, 3.0), dpi=150)
+        fig.patch.set_facecolor("#0D1117")
+        ax.set_facecolor("#0D1117")
+
+        eq = df["cum_pnl"].values
+        x  = np.arange(len(eq))
+
+        ax.fill_between(x, eq, alpha=0.13, color="#F0B90B", linewidth=0)
+        ax.plot(x, eq, color="#F0B90B", linewidth=2.4, solid_capstyle="round")
+        ax.axhline(0, color="#2D333B", linewidth=0.8)
+
+        # Year dividers + labels
+        for yr in [2021, 2022, 2023, 2024, 2025, 2026]:
+            mask = df["date"].str[:4] == str(yr)
+            idxs = np.where(mask.values)[0]
+            if len(idxs):
+                ax.axvline(idxs[0], color="#21262D", linewidth=1.0, zorder=0)
+                ax.text(idxs[0] + len(x)*0.005, eq.max()*0.05,
+                        str(yr), color="#484F58", fontsize=8.5,
+                        ha="left", fontfamily="DejaVu Sans")
+
+        # End dot + label
+        ax.scatter([len(eq)-1], [eq[-1]], color="#F0B90B", s=55, zorder=5)
+        ax.text(len(eq)*0.985, eq[-1]*0.86,
+                f"₹{eq[-1]/1e5:.2f}L",
+                color="#F0B90B", fontsize=9.5, ha="right",
+                fontweight="bold", fontfamily="DejaVu Sans")
+
+        ax.set_xlim(-8, len(eq) + 12)
+        ax.set_ylim(-eq.max()*0.07, eq.max()*1.20)
+        ax.axis("off")
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", bbox_inches="tight",
+                    facecolor="#0D1117", dpi=150, pad_inches=0.05)
+        buf.seek(0)
+        plt.close(fig)
+    return buf
+
+
 def make_wr_gauge(wr_pct, color_hex, size=1.8):
     """Mini donut gauge for win rate."""
     fig, ax = plt.subplots(figsize=(size, size), dpi=120)
@@ -471,8 +514,9 @@ def build():
     df, ag, yr_g, monthly, max_dd = load_stats()
 
     # Pre-generate charts once
-    equity_buf  = make_equity_chart(df)
-    monthly_buf = make_monthly_chart(monthly)
+    equity_buf   = make_equity_chart(df)
+    monthly_buf  = make_monthly_chart(monthly)
+    cover_eq_buf = make_cover_equity(df)
 
     # Agent emblem configs
     EMBLEMS = [
@@ -503,106 +547,95 @@ def build():
     # ══════════════════════════════════════════════════════════════
     # PAGE 1 — COVER  (dark background drawn by _draw_cover_bg)
     # ══════════════════════════════════════════════════════════════
-    story.append(Spacer(1, 1.6*cm))
+    story.append(Spacer(1, 0.9*cm))
 
-    story.append(HRFlowable(width="100%", thickness=2.5, color=GOLD,
-                             hAlign="CENTER", spaceAfter=0.7*cm))
+    story.append(HRFlowable(width="100%", thickness=3, color=GOLD,
+                             hAlign="CENTER", spaceAfter=0.6*cm))
 
     story.append(Paragraph("FIFTO",
         S("cv_t", fontSize=68, textColor=GOLD, alignment=TA_CENTER,
-          fontName="Helvetica-Bold", leading=76, spaceAfter=6)))
+          fontName="Helvetica-Bold", leading=76)))
 
-    story.append(Paragraph("Fusion Intraday Formula for Tactical Options",
-        S("cv_s", fontSize=16, textColor=WHITE, alignment=TA_CENTER,
-          fontName="Helvetica", leading=22, spaceAfter=0)))
+    story.append(Paragraph("Systematic NIFTY Options Selling",
+        S("cv_s", fontSize=15, textColor=WHITE, alignment=TA_CENTER,
+          fontName="Helvetica-Bold", leading=21)))
+
+    story.append(Spacer(1, 0.25*cm))
+
+    story.append(Paragraph(
+        "Intraday  ·  NIFTY 50 Weekly Options  ·  Fully Mechanical  ·  Zero Overnight Risk",
+        S("cv_tag", fontSize=10, textColor=SILVER, alignment=TA_CENTER,
+          fontName="Helvetica", leading=15)))
 
     story.append(Spacer(1, 0.5*cm))
 
-    story.append(Paragraph(
-        "NIFTY Weekly Options  ·  Intraday Option Selling System",
-        S("cv_tag1", fontSize=11, textColor=SILVER, alignment=TA_CENTER,
-          fontName="Helvetica-Oblique", leading=16)))
+    # ── Equity curve (5-year, minimal, dark bg) ───────────────────────────────
+    story.append(buf_to_rl_image(cover_eq_buf, 16.2, 5.0))
 
-    story.append(Spacer(1, 0.2*cm))
+    story.append(Spacer(1, 0.45*cm))
 
-    story.append(Paragraph(
-        "5-Year Verified Performance  ·  2021–2026  ·  949 Trades",
-        S("cv_tag2", fontSize=11, textColor=SILVER, alignment=TA_CENTER,
-          fontName="Helvetica-Oblique", leading=16)))
+    story.append(HRFlowable(width="85%", thickness=0.8, color=GOLD,
+                             hAlign="CENTER", spaceAfter=0.35*cm))
 
-    story.append(Spacer(1, 0.7*cm))
+    # ── 6-metric stats (2 rows × 3 cols) ─────────────────────────────────────
+    _cL = S("cL", fontSize=8.5, textColor=SILVER, alignment=TA_CENTER,
+             fontName="Helvetica-Bold", leading=11)
+    _cV = S("cV", fontSize=21,  textColor=GOLD,   alignment=TA_CENTER,
+             fontName="Helvetica-Bold", leading=26)
+    _sep = colors.HexColor("#2D333B")
 
-    story.append(HRFlowable(width="65%", thickness=1, color=GOLD,
-                             hAlign="CENTER", spaceAfter=0.25*cm))
-    story.append(Paragraph("— The Avengers of the Market —",
-        S("cv_av", fontSize=13, textColor=GOLD, alignment=TA_CENTER,
-          fontName="Helvetica-Bold", leading=18)))
-    story.append(HRFlowable(width="65%", thickness=1, color=GOLD,
-                             hAlign="CENTER", spaceAfter=0.8*cm))
-
-    # 7 agent emblems in a row
-    _emb_cw = 16.2 * cm / 7
-    _cv_emb_row = [buf_to_rl_image(emblem_bufs[n], 1.9, 1.9)
-                   for n, _, _, _ in EMBLEMS]
-    _cv_name_row = [
-        Paragraph(f"<font color='{c}'><b>{n}</b></font>",
-                  S(f"cvn{i}", fontSize=7, fontName="Helvetica-Bold",
-                    textColor=colors.HexColor(c), alignment=TA_CENTER, leading=9))
-        for i, (n, c, _, _) in enumerate(EMBLEMS)
-    ]
-    _cv_emb_tbl = Table(
-        [_cv_emb_row, _cv_name_row],
-        colWidths=[_emb_cw] * 7,
-        rowHeights=[2.05*cm, 0.45*cm])
-    _cv_emb_tbl.setStyle(TableStyle([
+    _stats_top = Table(
+        [[Paragraph("TOTAL P&amp;L",       _cL),
+          Paragraph("WIN RATE",             _cL),
+          Paragraph("POSITIVE MONTHS",      _cL)],
+         [Paragraph("Rs. 16,96,299",        _cV),
+          Paragraph("74.5%",               _cV),
+          Paragraph("94.8%",               _cV)]],
+        colWidths=[6.0*cm, 4.2*cm, 6.0*cm],
+        rowHeights=[0.65*cm, 1.25*cm])
+    _stats_top.setStyle(TableStyle([
         ("ALIGN",         (0,0), (-1,-1), "CENTER"),
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
         ("TOPPADDING",    (0,0), (-1,-1), 2),
         ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+        ("LINEAFTER",     (0,0), (1,-1), 0.6, _sep),
     ]))
-    story.append(_cv_emb_tbl)
-    story.append(Spacer(1, 0.9*cm))
+    story.append(_stats_top)
+    story.append(Spacer(1, 0.25*cm))
 
-    # Key stats row
-    _cvl = S("cvl", fontSize=9,  textColor=SILVER, alignment=TA_CENTER,
-              fontName="Helvetica-Bold", leading=12)
-    _cvv = S("cvv", fontSize=18, textColor=GOLD,   alignment=TA_CENTER,
-              fontName="Helvetica-Bold", leading=22)
-    _cv_stats = Table(
-        [[Paragraph("TOTAL P&amp;L", _cvl),
-          Paragraph("WIN RATE",       _cvl),
-          Paragraph("MAX DRAWDOWN",   _cvl),
-          Paragraph("COVERAGE",       _cvl)],
-         [Paragraph("Rs.16,96,299",   _cvv),
-          Paragraph("74.5%",          _cvv),
-          Paragraph("2.93%",          _cvv),
-          Paragraph("65.2%",          _cvv)]],
-        colWidths=[4.5*cm, 3.5*cm, 4.5*cm, 3.7*cm],
-        rowHeights=[0.75*cm, 1.35*cm])
-    _cv_stats.setStyle(TableStyle([
+    _stats_bot = Table(
+        [[Paragraph("MAX DRAWDOWN",         _cL),
+          Paragraph("AVG / TRADE",          _cL),
+          Paragraph("TRACK RECORD",         _cL)],
+         [Paragraph("2.93%",               _cV),
+          Paragraph("Rs. 1,788",           _cV),
+          Paragraph("5 Years",             _cV)]],
+        colWidths=[6.0*cm, 4.2*cm, 6.0*cm],
+        rowHeights=[0.65*cm, 1.25*cm])
+    _stats_bot.setStyle(TableStyle([
         ("ALIGN",         (0,0), (-1,-1), "CENTER"),
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
-        ("LINEBELOW",     (0,0), (-1,0), 0.5, colors.HexColor("#444444")),
-        ("LINEAFTER",     (0,0), (2,-1), 0.5, colors.HexColor("#444444")),
-        ("BOX",           (0,0), (-1,-1), 1,   colors.HexColor("#555555")),
-        ("TOPPADDING",    (0,0), (-1,-1), 4),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("TOPPADDING",    (0,0), (-1,-1), 2),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+        ("LINEAFTER",     (0,0), (1,-1), 0.6, _sep),
     ]))
-    story.append(_cv_stats)
-    story.append(Spacer(1, 0.7*cm))
+    story.append(_stats_bot)
+
+    story.append(Spacer(1, 0.4*cm))
+    story.append(HRFlowable(width="85%", thickness=0.8, color=GOLD,
+                             hAlign="CENTER", spaceAfter=0.3*cm))
 
     story.append(Paragraph(
-        "3 of 58 months negative  ·  Zero overnight holding  ·  Fully mechanical execution",
-        S("cv_3neg", fontSize=10, textColor=SILVER, alignment=TA_CENTER,
-          fontName="Helvetica-Oblique", leading=15)))
+        "Zero forward look-ahead bias  ·  Tick-level signal verification  ·  Fully mechanical execution",
+        S("cv_tag2", fontSize=9, textColor=SILVER, alignment=TA_CENTER,
+          fontName="Helvetica", leading=14)))
+    story.append(Spacer(1, 0.18*cm))
+    story.append(Paragraph(
+        "NIFTY 50  ·  January 2021 – April 2026  ·  949 Trades  ·  58 Months",
+        S("cv_tag3", fontSize=9, textColor=SILVER, alignment=TA_CENTER,
+          fontName="Helvetica-Oblique", leading=14)))
 
-    story.append(Spacer(1, 0.6*cm))
-
-    story.append(Paragraph("7 Agents  ·  7 Zones  ·  One Systematic Framework",
-        S("cv_7a", fontSize=11, textColor=SILVER, alignment=TA_CENTER,
-          fontName="Helvetica", leading=16)))
-
-    story.append(Spacer(1, 3.2*cm))
+    story.append(Spacer(1, 2.2*cm))
 
     story.append(HRFlowable(width="100%", thickness=2.5, color=GOLD,
                              hAlign="CENTER", spaceAfter=0.4*cm))
@@ -1172,10 +1205,10 @@ def build():
         story.append(Paragraph(f"<b>{title}</b>", H3))
         story.append(Paragraph(desc, BODY))
         story.append(Spacer(1, 0.08*cm))
-    story.append(Spacer(1, 0.5*cm))
+    story.append(PageBreak())
 
     # ══════════════════════════════════════════════════════════════
-    # EXIT RULES  (continues from Entry Rules)
+    # EXIT RULES
     # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Universal Exit Rules", H1))
     story.append(hr())
@@ -1233,10 +1266,10 @@ def build():
     story.append(Spacer(1, 0.3*cm))
     story.append(Paragraph(
         "<b>5-year exit distribution:</b> Target 63.5% · Trail SL 9.0% · EOD 20.7% · Hard SL 6.8%", BODY))
-    story.append(Spacer(1, 0.5*cm))
+    story.append(PageBreak())
 
     # ══════════════════════════════════════════════════════════════
-    # CONVICTION SCORING  (continues from Exit Rules)
+    # CONVICTION SCORING
     # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Conviction Scoring — Lot Sizing Framework", H1))
     story.append(hr())
@@ -1454,8 +1487,9 @@ def build():
     story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
-    # QUICK REFERENCE  (continues from Paper Trading)
+    # QUICK REFERENCE
     # ══════════════════════════════════════════════════════════════
+    story.append(PageBreak())
     story.append(Paragraph("Quick Reference Card", H1))
     story.append(hr())
 
