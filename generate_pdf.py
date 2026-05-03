@@ -1373,7 +1373,7 @@ def build():
     boost_tbl.setStyle(b_ts)
     story.append(boost_tbl)
     story.append(Paragraph(
-        "Both boosts cap at 3 lots total. Combined: +Rs.5,197/mo (+17.8% over base).", SMALL))
+        "Both boosts cap at 3 lots total. Combined (joint backtest): +Rs.4,734/mo (+16.2% over base).", SMALL))
     story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
@@ -1553,19 +1553,23 @@ def build():
     story.append(Paragraph("System v1.1 — Validated Live Improvements", H1))
     story.append(hr())
     story.append(Paragraph(
-        "Three bias-free improvements verified against the full 58-month backtest "
-        "(January 2021 – April 2026). All three use only <b>pre-market or real-time data</b> "
-        "available at trade entry — zero look-ahead. Combined uplift: <b>+Rs.6,837/month "
-        "(+23.4% over base Rs.29,247/month)</b>.", BODY))
+        "Three bias-free improvements verified against the full 58-month combined backtest "
+        "(January 2021 – April 2026, 148_combined_backtest.py). All three use only "
+        "<b>pre-market or real-time data</b> available at trade entry — zero look-ahead. "
+        "Combined uplift verified in joint backtest: <b>+Rs.6,374/month "
+        "(+21.8% over base Rs.29,247/month)</b>. "
+        "Note: individual improvement figures below are standalone estimates; the joint "
+        "backtest gives the true combined figure (Rs.35,621/mo) after accounting for "
+        "3-lot cap interactions between DTE and Basis boosts.", BODY))
     story.append(Spacer(1, 0.3*cm))
 
     # Impact summary table
     impact_data = [
-        ["Improvement",           "Type",         "Delta/Month", "Notes"],
-        ["DTE ≤ 1 Lot Boost",     "Lot sizing",   "+Rs. 3,886",  "Add 1 lot on expiry / day-before"],
-        ["Basis S3 Lot Boost",    "Lot sizing",   "+Rs. 1,311",  "|Futures basis| > 50 pts, direction aligned"],
-        ["Contra Trade",          "New signal",   "+Rs. 1,640",  "Sell opposite option after hard_sl pullback"],
-        ["TOTAL UPLIFT",          "—",            "+Rs. 6,837",  "+23.4% vs base monthly average"],
+        ["Improvement",           "Type",         "Standalone/Month", "Notes"],
+        ["DTE ≤ 1 Lot Boost",     "Lot sizing",   "+Rs. 3,886",       "Add 1 lot on expiry / day-before"],
+        ["Basis S3 Lot Boost",    "Lot sizing",   "+Rs. 1,311",       "|Futures basis| > 50 pts, direction aligned"],
+        ["Contra Trade",          "New signal",   "+Rs. 1,640",       "Sell opposite option after hard_sl pullback"],
+        ["COMBINED (joint backtest)", "—",        "+Rs. 6,374",       "+21.8% vs base — verified in 148_combined_backtest"],
     ]
     imp_tbl = Table(impact_data, colWidths=[4.5*cm, 2.5*cm, 2.8*cm, 6.2*cm])
     imp_ts = tblstyle(DARK)
@@ -1700,9 +1704,9 @@ def build():
                      fontName="Helvetica-Bold", alignment=TA_CENTER, leading=12))],
          [Paragraph("Rs. 29,247 / month", S("v10v", fontSize=16, textColor=WHITE,
                      fontName="Helvetica-Bold", alignment=TA_CENTER, leading=20)),
-          Paragraph("+Rs. 6,837 / month", S("v11v", fontSize=16, textColor=GOLD,
+          Paragraph("+Rs. 6,374 / month", S("v11v", fontSize=16, textColor=GOLD,
                      fontName="Helvetica-Bold", alignment=TA_CENTER, leading=20)),
-          Paragraph("Rs. 36,084 / month", S("v11cv", fontSize=16, textColor=GOLD,
+          Paragraph("Rs. 35,621 / month", S("v11cv", fontSize=16, textColor=GOLD,
                      fontName="Helvetica-Bold", alignment=TA_CENTER, leading=20))],
         ],
         colWidths=[5.4*cm, 5.4*cm, 5.4*cm],
