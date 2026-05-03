@@ -1353,6 +1353,27 @@ def build():
     lt_ts.add("FONTNAME",   (3,6), (3,6), "Helvetica-Bold")
     lt_tbl.setStyle(lt_ts)
     story.append(KeepTogether([_lot_h2, lt_tbl]))
+    story.append(Spacer(1, 0.35*cm))
+
+    # ── Live execution boosts (on top of conviction sizing) ───────────────────
+    story.append(Paragraph("Live Execution Boosts (applied on top of conviction size)", H2))
+    story.append(Paragraph(
+        "Two additional +1 lot boosts are applied at execution time before every entry, "
+        "on top of the conviction score. They are <b>not</b> part of the base backtest — "
+        "they represent validated improvements from 148_combined_backtest (58 months).", BODY))
+    story.append(Spacer(1, 0.2*cm))
+    boost_data = [
+        ["Boost",            "Condition",                                    "Delta/Month", "Logic"],
+        ["DTE ≤ 1",          "Trade day is expiry or day-before expiry",     "+Rs. 3,886",  "Theta decays fastest in last 24h — same premium, higher probability"],
+        ["Basis S3",         "|Futures basis| > 50 pts AND direction aligned","+ Rs. 1,311", "Strong basis = carry conviction — PE sell when basis > 50, CE sell when < −50"],
+    ]
+    boost_tbl = Table(boost_data, colWidths=[2.2*cm, 5.5*cm, 2.8*cm, 6.5*cm])
+    b_ts = tblstyle(DARK_GREY)
+    b_ts.add("BACKGROUND", (0,1), (-1,2), GREEN_LIGHT)
+    boost_tbl.setStyle(b_ts)
+    story.append(boost_tbl)
+    story.append(Paragraph(
+        "Both boosts cap at 3 lots total. Combined: +Rs.5,197/mo (+17.8% over base).", SMALL))
     story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
@@ -1526,6 +1547,178 @@ def build():
     story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
+    # SYSTEM v1.1 — LIVE IMPROVEMENTS
+    # ══════════════════════════════════════════════════════════════
+    story.append(PageBreak())
+    story.append(Paragraph("System v1.1 — Validated Live Improvements", H1))
+    story.append(hr())
+    story.append(Paragraph(
+        "Three bias-free improvements verified against the full 58-month backtest "
+        "(January 2021 – April 2026). All three use only <b>pre-market or real-time data</b> "
+        "available at trade entry — zero look-ahead. Combined uplift: <b>+Rs.6,837/month "
+        "(+23.4% over base Rs.29,247/month)</b>.", BODY))
+    story.append(Spacer(1, 0.3*cm))
+
+    # Impact summary table
+    impact_data = [
+        ["Improvement",           "Type",         "Delta/Month", "Notes"],
+        ["DTE ≤ 1 Lot Boost",     "Lot sizing",   "+Rs. 3,886",  "Add 1 lot on expiry / day-before"],
+        ["Basis S3 Lot Boost",    "Lot sizing",   "+Rs. 1,311",  "|Futures basis| > 50 pts, direction aligned"],
+        ["Contra Trade",          "New signal",   "+Rs. 1,640",  "Sell opposite option after hard_sl pullback"],
+        ["TOTAL UPLIFT",          "—",            "+Rs. 6,837",  "+23.4% vs base monthly average"],
+    ]
+    imp_tbl = Table(impact_data, colWidths=[4.5*cm, 2.5*cm, 2.8*cm, 6.2*cm])
+    imp_ts = tblstyle(DARK)
+    imp_ts.add("BACKGROUND", (0,4), (-1,4), LIGHT_BLUE)
+    imp_ts.add("FONTNAME",   (0,4), (-1,4), "Helvetica-Bold")
+    imp_ts.add("TEXTCOLOR",  (0,4), (-1,4), WHITE)
+    imp_ts.add("BACKGROUND", (0,1), (-1,3), GREEN_LIGHT)
+    imp_tbl.setStyle(imp_ts)
+    story.append(imp_tbl)
+    story.append(Spacer(1, 0.45*cm))
+
+    # ── Improvement 1: DTE Boost ──────────────────────────────────────────────
+    story.append(Paragraph("1.  DTE ≤ 1 Lot Boost", H2))
+    story.append(Paragraph(
+        "On <b>expiry day (DTE = 0)</b> and <b>the day before expiry (DTE = 1)</b>, "
+        "one additional lot is added to the trade (capped at 3 lots total). "
+        "Theta decay accelerates sharply in the final 24 hours — the same option premium "
+        "collected decays faster, making each unit of risk proportionally more rewarding.", BODY))
+    story.append(Spacer(1, 0.1*cm))
+    dte_data = [
+        ["Metric",           "Value"],
+        ["Condition",        "DTE ≤ 1 (computed from nearest weekly expiry)"],
+        ["Action",           "+1 lot added (max 3 lots)"],
+        ["Trades affected",  "~15–20% of all trades fall on expiry or day-before"],
+        ["Backtest delta",   "+Rs. 3,886 / month  (+Rs. 2,25,388 over 58 months)"],
+        ["Risk change",      "None — same hard SL %, larger absolute amount at risk"],
+    ]
+    dte_tbl = Table(dte_data, colWidths=[3.5*cm, 12.5*cm])
+    dte_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (0,-1), MID_GREY),
+        ("FONTNAME",      (0,0), (0,-1), "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("FONTNAME",      (1,0), (1,-1), "Helvetica"),
+        ("ROWBACKGROUNDS",(0,0), (-1,-1), [LIGHT_GREY, WHITE]),
+        ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ("BACKGROUND",    (0,4), (-1,4), GREEN_LIGHT),
+    ]))
+    story.append(dte_tbl)
+    story.append(Spacer(1, 0.35*cm))
+
+    # ── Improvement 2: Basis S3 Boost ────────────────────────────────────────
+    story.append(Paragraph("2.  Futures Basis S3 Lot Boost", H2))
+    story.append(Paragraph(
+        "When the <b>NIFTY futures basis exceeds 50 points in magnitude AND is aligned "
+        "with the trade direction</b>, one additional lot is added. A large positive basis "
+        "(spot below futures) favours PE sellers — institutions are bidding futures up, "
+        "reducing downside risk. A large negative basis favours CE sellers.", BODY))
+    story.append(Spacer(1, 0.1*cm))
+    basis_data = [
+        ["Metric",           "Value"],
+        ["Condition",        "|Futures basis| > 50 pts  AND  direction aligned"],
+        ["Direction rule",   "PE sell: basis > +50  |  CE sell: basis < −50"],
+        ["Action",           "+1 lot added (max 3 lots)"],
+        ["Backtest delta",   "+Rs. 1,311 / month  (+Rs. 76,038 over 58 months)"],
+        ["Basis fetch time", "09:15 AM — computed once per day from live futures LTP"],
+    ]
+    basis_tbl = Table(basis_data, colWidths=[3.5*cm, 12.5*cm])
+    basis_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (0,-1), MID_GREY),
+        ("FONTNAME",      (0,0), (0,-1), "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("FONTNAME",      (1,0), (1,-1), "Helvetica"),
+        ("ROWBACKGROUNDS",(0,0), (-1,-1), [LIGHT_GREY, WHITE]),
+        ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ("BACKGROUND",    (0,4), (-1,4), GREEN_LIGHT),
+    ]))
+    story.append(basis_tbl)
+    story.append(Spacer(1, 0.35*cm))
+
+    # ── Improvement 3: Contra Trade ───────────────────────────────────────────
+    story.append(Paragraph("3.  Contra Trade — Post Hard-SL Recovery Entry", H2))
+    story.append(Paragraph(
+        "When a trade exits via <b>hard_sl</b> (option doubles), the system immediately "
+        "begins monitoring the NIFTY spot price. When spot <b>pulls back within 30 points "
+        "of the spot price at the time of the hard_sl exit</b>, a new trade is entered "
+        "in the <b>opposite direction</b> — the market has reversed, confirming the "
+        "initial move was a false spike. Entry cutoff: 14:00.", BODY))
+    story.append(Spacer(1, 0.1*cm))
+    contra_data = [
+        ["Metric",           "Value"],
+        ["Trigger",          "Hard_sl exit — option premium doubled from entry"],
+        ["Entry condition",  "Spot pulls back to within 30 pts of hard_sl exit spot (≤ 14:00)"],
+        ["Direction",        "PE hard_sl → sell CE  |  CE hard_sl → sell PE"],
+        ["Strike",           "ATM at time of contra entry"],
+        ["Lots",             "1 lot (+ DTE / Basis boosts if applicable)"],
+        ["Exit rules",       "Identical to base trade: 30% target, 2× hard SL, trail SL, EOD"],
+        ["Historical stats", "59 / 65 triggered (90.8%)  |  WR 91.5%  |  +Rs.1,640/month"],
+        ["Backtest delta",   "+Rs. 95,111 total over 58 months"],
+    ]
+    contra_tbl = Table(contra_data, colWidths=[3.5*cm, 12.5*cm])
+    contra_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (0,-1), MID_GREY),
+        ("FONTNAME",      (0,0), (0,-1), "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("FONTNAME",      (1,0), (1,-1), "Helvetica"),
+        ("ROWBACKGROUNDS",(0,0), (-1,-1), [LIGHT_GREY, WHITE]),
+        ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ("BACKGROUND",    (0,7), (-1,8), GREEN_LIGHT),
+    ]))
+    story.append(contra_tbl)
+    story.append(Spacer(1, 0.35*cm))
+
+    story.append(Paragraph(
+        "<b>Why contra works:</b> A hard_sl means the market moved sharply against the trade. "
+        "In most cases (91.5% historically) the sharp move is temporary — the spot reverts "
+        "to the zone it spiked from. Selling the opposite option after the pullback captures "
+        "this mean-reversion with the same mechanical exit rules, requiring zero human judgment.",
+        S("cbody", fontSize=9.5, textColor=DARK_GREY, fontName="Helvetica",
+          leading=14, alignment=TA_JUSTIFY, leftIndent=8, rightIndent=8,
+          borderPad=6)))
+    story.append(Spacer(1, 0.4*cm))
+
+    # Combined v1.1 metrics box
+    v11_box = Table(
+        [[Paragraph("BASE SYSTEM (v1.0)", S("v10l", fontSize=9, textColor=GOLD,
+                     fontName="Helvetica-Bold", alignment=TA_CENTER, leading=12)),
+          Paragraph("v1.1 IMPROVEMENTS", S("v11l", fontSize=9, textColor=GOLD,
+                     fontName="Helvetica-Bold", alignment=TA_CENTER, leading=12)),
+          Paragraph("COMBINED (v1.1)", S("v11cl", fontSize=9, textColor=GOLD,
+                     fontName="Helvetica-Bold", alignment=TA_CENTER, leading=12))],
+         [Paragraph("Rs. 29,247 / month", S("v10v", fontSize=16, textColor=WHITE,
+                     fontName="Helvetica-Bold", alignment=TA_CENTER, leading=20)),
+          Paragraph("+Rs. 6,837 / month", S("v11v", fontSize=16, textColor=GOLD,
+                     fontName="Helvetica-Bold", alignment=TA_CENTER, leading=20)),
+          Paragraph("Rs. 36,084 / month", S("v11cv", fontSize=16, textColor=GOLD,
+                     fontName="Helvetica-Bold", alignment=TA_CENTER, leading=20))],
+        ],
+        colWidths=[5.4*cm, 5.4*cm, 5.4*cm],
+        rowHeights=[0.7*cm, 1.3*cm])
+    v11_box.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), DARK),
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("BOX",           (0,0), (-1,-1), 1.2, GOLD),
+        ("LINEAFTER",     (0,0), (1,-1),  0.8, colors.HexColor("#2D333B")),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ]))
+    story.append(v11_box)
+
+    # ══════════════════════════════════════════════════════════════
     # QUICK REFERENCE
     # ══════════════════════════════════════════════════════════════
     story.append(PageBreak())
@@ -1612,8 +1805,9 @@ def build():
     story.append(Spacer(1, 0.4*cm))
 
     story.append(Paragraph(
-        "FIFTO v1.0  ·  5-Year Backtest: 2021–2026  ·  949 Trades  ·  "
-        "NIFTY Weekly Options  ·  Zero forward look-ahead bias verified", SMALL))
+        "FIFTO v1.1  ·  5-Year Backtest: 2021–2026  ·  949 Trades  ·  "
+        "NIFTY Weekly Options  ·  Zero forward look-ahead bias verified  ·  "
+        "v1.1 improvements: DTE boost · Basis boost · Contra trade", SMALL))
 
     doc.build(story, onFirstPage=_draw_cover_bg, onLaterPages=_draw_page_header)
     sz = os.path.getsize(OUT_PATH)
