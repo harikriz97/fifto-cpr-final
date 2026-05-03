@@ -174,7 +174,7 @@ def market_open_tasks(client: AngelClient, state: DayState):
     """
     # Futures basis at open
     try:
-        fut_ltp  = client.get_ltp(NFO, "NIFTYFUT", "")   # update with correct token
+        fut_ltp  = client.get_ltp(NFO, "NIFTY25MAYFUT", "35227")  # NIFTY near-month futures
         spot_ltp = client.get_nifty_spot()
         state.fut_basis_pts = round(fut_ltp - spot_ltp, 2)
         logger.info(f"  Futures basis: {state.fut_basis_pts} pts")
@@ -197,12 +197,19 @@ def on_ib_confirmed(client: AngelClient, state: DayState):
 
     state.ib = compute_ib(ticks_df)
     logger.info(
-        f"IB confirmed: high={state.ib['ib_high']} "
-        f"low={state.ib['ib_low']} range={state.ib['ib_range']}"
+        f"IB confirmed: high={state.ib.get('ib_high')} "
+        f"low={state.ib.get('ib_low')} range={state.ib.get('ib_range')}"
     )
 
-    # Score7 features (direction TBD — computed per base signal direction)
-    # Stored here; direction-specific features computed when signal fires
+    # today_open: first tick or live spot fallback
+    if not ticks_df.empty:
+        today_open = float(ticks_df["price"].iloc[0])
+    else:
+        try:
+            today_open = client.get_nifty_spot()
+            logger.info(f"No ticks yet — using live spot as today_open: {today_open:.2f}")
+        except Exception:
+            today_open = float(state.ema20 or 0.0)
 
     # Init blank day scanners (CRT + MRC)
     state.crt_scanner = CRTScanner(
@@ -216,6 +223,32 @@ def on_ib_confirmed(client: AngelClient, state: DayState):
         pdl=state.pdl,
     )
     logger.info("CRT + MRC scanners initialized.")
+
+    # Init base scanner: THOR / HULK / IRON MAN / CAPTAIN
+    ohlc_hist = getattr(state, "_ohlc_history", None)
+    prev_row  = ohlc_hist.iloc[-1] if (ohlc_hist is not None and not ohlc_hist.empty) else None
+    state.base_scanner = BaseScanner(
+        levels={**state.cpr, **state.cam, "pdh": state.pdh, "pdl": state.pdl},
+        ema20=float(state.ema20 or 0.0),
+        today_open=today_open,
+        fut_basis_pts=state.fut_basis_pts,
+        prev_close=float(prev_row["close"]) if prev_row is not None else 0.0,
+        prev_open=float(prev_row["open"])   if prev_row is not None else 0.0,
+        vix_today=getattr(state, "_vix_today", 0.0),
+        vix_ma20=getattr(state,  "_vix_ma20",  15.0),
+        dte=getattr(state, "_dte", 4),
+        ohlc_history=ohlc_hist,
+    )
+    state.base_scanner.set_ib(
+        state.ib.get("ib_high") or 0.0,
+        state.ib.get("ib_low")  or 0.0,
+    )
+    thor = state.base_scanner._thor_sched
+    logger.info(
+        f"BaseScanner ready: zone={state.base_scanner._zone} "
+        f"bias={state.base_scanner._bias} "
+        f"THOR={'@ '+thor if thor else 'no signal'}"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
