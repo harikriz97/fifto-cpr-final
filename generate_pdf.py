@@ -4,23 +4,45 @@ generate_pdf.py — FIFTO Intraday Option Selling System — Client PDF
 Generates: FIFTO_Intraday_Selling_System.pdf
 """
 import os
-from reportlab.lib          import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles   import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units    import cm, mm
-from reportlab.platypus     import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, PageBreak, KeepTogether
-)
-from reportlab.lib.enums    import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
-from reportlab.pdfbase      import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+import io
+import pandas as pd
+import numpy as np
 
-# ── Color Palette ──────────────────────────────────────────────────────────────
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.ticker as mticker
+from matplotlib.patches import FancyBboxPatch, Circle as MplCircle, Arc, Wedge as MplWedge
+from matplotlib.lines import Line2D
+from matplotlib import patheffects as mpe
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm, mm
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+    HRFlowable, PageBreak, KeepTogether, Image as RLImage,
+    FrameBreak
+)
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
+from reportlab.graphics.shapes import Drawing, Circle, Rect, Polygon, String, Line as RLLine
+from reportlab.graphics import renderPDF
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+CSV_PATH = os.path.join(os.path.dirname(__file__),
+                        "data", "20260503", "127_all_trades.csv")
+OUT_PATH = "FIFTO_Intraday_Selling_System.pdf"
+
+# ── Color Palette ────────────────────────────────────────────────────────────
 DARK        = colors.HexColor("#0D1117")
+DARK2       = colors.HexColor("#161B22")
 GOLD        = colors.HexColor("#F0B90B")
+GOLD_LIGHT  = colors.HexColor("#FDD835")
 BLUE        = colors.HexColor("#1565C0")
 LIGHT_BLUE  = colors.HexColor("#1E3A5F")
+NAVY        = colors.HexColor("#0D2137")
 RED         = colors.HexColor("#C62828")
 GREEN       = colors.HexColor("#2E7D32")
 SILVER      = colors.HexColor("#607D8B")
@@ -29,90 +51,432 @@ LIGHT_GREY  = colors.HexColor("#F5F5F5")
 MID_GREY    = colors.HexColor("#ECEFF1")
 DARK_GREY   = colors.HexColor("#263238")
 ACCENT      = colors.HexColor("#FF6F00")
+GREEN_LIGHT = colors.HexColor("#E8F5E9")
+RED_LIGHT   = colors.HexColor("#FFEBEE")
 
-# Marvel agent colors
-THOR_COLOR   = colors.HexColor("#1565C0")   # Thor blue
-HULK_COLOR   = colors.HexColor("#2E7D32")   # Hulk green
-IRON_COLOR   = colors.HexColor("#C62828")   # Iron Man red-gold
-CAP_COLOR    = colors.HexColor("#0D47A1")   # Cap dark blue
-SPIDER_COLOR = colors.HexColor("#B71C1C")   # Spider-Man red
-WIDOW_COLOR  = colors.HexColor("#37474F")   # Black Widow dark
-HAWK_COLOR   = colors.HexColor("#6A1B9A")   # Hawkeye purple
+THOR_C   = "#1565C0"
+HULK_C   = "#2E7D32"
+IRON_C   = "#C62828"
+CAP_C    = "#0D47A1"
+SPIDER_C = "#B71C1C"
+WIDOW_C  = "#37474F"
+HAWK_C   = "#6A1B9A"
 
-OUT_PATH = "FIFTO_Intraday_Selling_System.pdf"
+# ── Page size ────────────────────────────────────────────────────────────────
+W, H = A4   # 595 x 842 pts
 
-# ── Style sheet ───────────────────────────────────────────────────────────────
-styles = getSampleStyleSheet()
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 1 — STYLES
+# ─────────────────────────────────────────────────────────────────────────────
+def S(name, **kw): return ParagraphStyle(name, **kw)
 
-def S(name, **kw):
-    return ParagraphStyle(name, **kw)
-
-COVER_TITLE  = S("ct", fontSize=42, textColor=GOLD, alignment=TA_CENTER,
-                 fontName="Helvetica-Bold", leading=50, spaceAfter=8)
-COVER_SUB    = S("cs", fontSize=18, textColor=WHITE, alignment=TA_CENTER,
-                 fontName="Helvetica", leading=26, spaceAfter=6)
-COVER_TAG    = S("ctag", fontSize=12, textColor=SILVER, alignment=TA_CENTER,
-                 fontName="Helvetica-Oblique", leading=18)
+COVER_TITLE = S("ct", fontSize=46, textColor=GOLD, alignment=TA_CENTER,
+                fontName="Helvetica-Bold", leading=54, spaceAfter=6)
+COVER_SUB   = S("cs", fontSize=18, textColor=WHITE, alignment=TA_CENTER,
+                fontName="Helvetica", leading=26, spaceAfter=4)
+COVER_TAG   = S("ctag", fontSize=11, textColor=SILVER, alignment=TA_CENTER,
+                fontName="Helvetica-Oblique", leading=17)
+COVER_STAT_LABEL = S("csl", fontSize=9, textColor=SILVER, alignment=TA_CENTER,
+                     fontName="Helvetica-Bold", leading=13)
+COVER_STAT_VAL   = S("csv", fontSize=20, textColor=GOLD, alignment=TA_CENTER,
+                     fontName="Helvetica-Bold", leading=24)
 
 H1 = S("h1", fontSize=22, textColor=GOLD, fontName="Helvetica-Bold",
-        leading=28, spaceBefore=14, spaceAfter=6)
+        leading=28, spaceBefore=12, spaceAfter=6)
 H2 = S("h2", fontSize=15, textColor=LIGHT_BLUE, fontName="Helvetica-Bold",
         leading=20, spaceBefore=10, spaceAfter=4)
 H3 = S("h3", fontSize=12, textColor=DARK_GREY, fontName="Helvetica-Bold",
         leading=16, spaceBefore=6, spaceAfter=3)
-BODY = S("body", fontSize=10, textColor=DARK_GREY, fontName="Helvetica",
-          leading=15, spaceBefore=3, spaceAfter=3, alignment=TA_JUSTIFY)
-SMALL = S("small", fontSize=9, textColor=SILVER, fontName="Helvetica",
-           leading=13, spaceBefore=2)
-RULE_BODY = S("rule", fontSize=10, textColor=DARK_GREY, fontName="Helvetica",
-               leading=16, spaceBefore=2, spaceAfter=2, leftIndent=12)
-AGENT_TITLE = S("at", fontSize=16, textColor=WHITE, fontName="Helvetica-Bold",
-                 leading=22, alignment=TA_LEFT)
-AGENT_SUB   = S("asub", fontSize=10, textColor=MID_GREY, fontName="Helvetica-Oblique",
-                 leading=14, alignment=TA_LEFT)
+BODY   = S("body", fontSize=10, textColor=DARK_GREY, fontName="Helvetica",
+           leading=15, spaceBefore=3, spaceAfter=3, alignment=TA_JUSTIFY)
+SMALL  = S("small", fontSize=8.5, textColor=SILVER, fontName="Helvetica",
+           leading=12, spaceBefore=2)
+RULE_B = S("rule", fontSize=10, textColor=DARK_GREY, fontName="Helvetica",
+           leading=16, spaceBefore=2, spaceAfter=2, leftIndent=12)
+AGENT_T = S("at", fontSize=18, textColor=WHITE, fontName="Helvetica-Bold",
+             leading=24, alignment=TA_LEFT)
+AGENT_S = S("asub", fontSize=10, textColor=MID_GREY, fontName="Helvetica-Oblique",
+             leading=14, alignment=TA_LEFT)
 
 def agent_name_style(color):
     return S("an", fontSize=18, textColor=color, fontName="Helvetica-Bold",
-              leading=24, spaceBefore=8, spaceAfter=4)
+              leading=24, spaceBefore=6, spaceAfter=4)
 
-# ── Table style helpers ────────────────────────────────────────────────────────
-def header_table_style(header_color=LIGHT_BLUE):
+def hr(): return HRFlowable(width="100%", thickness=1.5,
+                             color=GOLD, spaceAfter=8, spaceBefore=6)
+def hr_thin(): return HRFlowable(width="100%", thickness=0.5,
+                                  color=colors.HexColor("#CFD8DC"),
+                                  spaceAfter=6, spaceBefore=6)
+
+def tblstyle(hdr=LIGHT_BLUE, fs=9):
     return TableStyle([
-        ("BACKGROUND",  (0,0), (-1,0), header_color),
-        ("TEXTCOLOR",   (0,0), (-1,0), WHITE),
-        ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
-        ("FONTSIZE",    (0,0), (-1,0), 10),
-        ("ALIGN",       (0,0), (-1,-1), "CENTER"),
-        ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
-        ("FONTNAME",    (0,1), (-1,-1), "Helvetica"),
-        ("FONTSIZE",    (0,1), (-1,-1), 9),
-        ("ROWBACKGROUNDS", (0,1), (-1,-1), [WHITE, LIGHT_GREY]),
-        ("GRID",        (0,0), (-1,-1), 0.4, colors.HexColor("#B0BEC5")),
-        ("TOPPADDING",  (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING",(0,0), (-1,-1), 5),
-        ("LEFTPADDING", (0,0), (-1,-1), 6),
-        ("RIGHTPADDING",(0,0), (-1,-1), 6),
+        ("BACKGROUND",    (0,0), (-1,0), hdr),
+        ("TEXTCOLOR",     (0,0), (-1,0), WHITE),
+        ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,0), fs),
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("FONTNAME",      (0,1), (-1,-1), "Helvetica"),
+        ("FONTSIZE",      (0,1), (-1,-1), fs - 1),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, LIGHT_GREY]),
+        ("GRID",          (0,0), (-1,-1), 0.4, colors.HexColor("#B0BEC5")),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 6),
     ])
 
-def agent_card_bg(color):
-    return TableStyle([
-        ("BACKGROUND", (0,0), (-1,-1), color),
-        ("TEXTCOLOR",  (0,0), (-1,-1), WHITE),
-        ("TOPPADDING", (0,0), (-1,-1), 10),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 10),
-        ("LEFTPADDING",(0,0), (-1,-1), 14),
-        ("RIGHTPADDING",(0,0),(-1,-1), 14),
-        ("ROUNDEDCORNERS", [6]),
-    ])
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 2 — DATA LOADING
+# ─────────────────────────────────────────────────────────────────────────────
+def load_stats():
+    df = pd.read_csv(CSV_PATH)
+    df["date"] = df["date"].astype(str)
 
-def hr(): return HRFlowable(width="100%", thickness=1.2,
-                             color=GOLD, spaceAfter=8, spaceBefore=8)
-def hr_light(): return HRFlowable(width="100%", thickness=0.5,
-                                   color=colors.HexColor("#CFD8DC"),
-                                   spaceAfter=6, spaceBefore=6)
+    def map_agent(row):
+        s = row["signal"]
+        m = {"v17a":"THOR","cam_l3":"HULK","cam_h3":"IRON MAN",
+             "iv2_r1":"IRON MAN","iv2_r2":"IRON MAN","iv2_pdl":"CAPTAIN",
+             "CRT":"SPIDER-MAN","MRC":"BLACK WIDOW","S4_2nd":"HAWKEYE"}
+        return m.get(s, "OTHER")
 
-# ── Build document ─────────────────────────────────────────────────────────────
+    df["agent"] = df.apply(map_agent, axis=1)
+    df["ym"]    = df["date"].str[:6]
+    df["yr"]    = df["date"].str[:4].astype(int)
+
+    agent_g = df.groupby("agent").agg(
+        trades   = ("pnl", "count"),
+        wr       = ("win", "mean"),
+        total    = ("pnl", "sum"),
+        avg      = ("pnl", "mean"),
+        hard_sl  = ("exit_reason", lambda x: (x=="hard_sl").sum()),
+        target_n = ("exit_reason", lambda x: (x=="target").sum()),
+    ).round(2)
+    agent_g["wr_pct"]       = (agent_g["wr"] * 100).round(1)
+    agent_g["hard_sl_pct"]  = (agent_g["hard_sl"] / agent_g["trades"] * 100).round(1)
+    agent_g["target_pct"]   = (agent_g["target_n"] / agent_g["trades"] * 100).round(1)
+    agent_g["total_fmt"]    = agent_g["total"].apply(lambda x: f"Rs.{x:,.0f}")
+    agent_g["avg_fmt"]      = agent_g["avg"].apply(lambda x: f"Rs.{x:,.0f}")
+
+    yr_g = df.groupby("yr").agg(
+        trades = ("pnl", "count"),
+        wr     = ("win", "mean"),
+        total  = ("pnl", "sum"),
+        avg    = ("pnl", "mean"),
+    ).round(2)
+
+    monthly = df.groupby("ym")["pnl"].sum().reset_index()
+    monthly.columns = ["ym", "pnl"]
+
+    peak  = df["cum_pnl"].cummax()
+    dd    = df["cum_pnl"] - peak
+    max_dd = abs(dd.min())
+
+    return df, agent_g, yr_g, monthly, max_dd
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 3 — CHART GENERATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+MPL_STYLE = {
+    "figure.facecolor": "#0D1117",
+    "axes.facecolor":   "#161B22",
+    "axes.edgecolor":   "#30363D",
+    "axes.labelcolor":  "#C9D1D9",
+    "xtick.color":      "#8B949E",
+    "ytick.color":      "#8B949E",
+    "text.color":       "#C9D1D9",
+    "grid.color":       "#21262D",
+    "grid.linewidth":   0.5,
+    "axes.spines.top":  False,
+    "axes.spines.right":False,
+}
+
+
+def make_equity_chart(df):
+    """Equity curve + drawdown, dark theme."""
+    with plt.rc_context(MPL_STYLE):
+        fig = plt.figure(figsize=(12, 7))
+        gs  = fig.add_gridspec(3, 1, hspace=0.08)
+        ax1 = fig.add_subplot(gs[:2, 0])
+        ax2 = fig.add_subplot(gs[2, 0], sharex=ax1)
+
+        x    = np.arange(len(df))
+        eq   = df["cum_pnl"].values / 1e5   # in lakhs
+        peak = np.maximum.accumulate(eq)
+        dd   = (eq - peak)
+
+        # Equity curve
+        ax1.fill_between(x, eq, alpha=0.18, color="#F0B90B")
+        ax1.plot(x, eq, color="#F0B90B", linewidth=1.8, label="Cumulative P&L")
+        ax1.plot(x, peak, color="#4FC3F7", linewidth=0.8, alpha=0.5,
+                 linestyle="--", label="Peak Equity")
+        ax1.set_ylabel("₹ Lakhs", fontsize=10, labelpad=6)
+        ax1.yaxis.set_major_formatter(mticker.FuncFormatter(
+            lambda v, _: f"₹{v:.1f}L"))
+        ax1.grid(True)
+        ax1.legend(loc="upper left", fontsize=9,
+                   facecolor="#161B22", edgecolor="#30363D",
+                   labelcolor="#C9D1D9")
+
+        # Year dividers
+        yr_changes = df[df["date"].str[4:8] == "0101"].index.tolist()
+        for idx in yr_changes:
+            ax1.axvline(idx, color="#30363D", linewidth=0.8)
+
+        # Year labels
+        for yr in [2021, 2022, 2023, 2024, 2025, 2026]:
+            mask = df["date"].str[:4] == str(yr)
+            idxs = np.where(mask)[0]
+            if len(idxs):
+                mid = idxs[len(idxs)//2]
+                ax1.text(mid, ax1.get_ylim()[0] if ax1.get_ylim()[0] > 0 else 0.05,
+                         str(yr), color="#8B949E", fontsize=8,
+                         ha="center", va="bottom")
+
+        ax1.set_title("FIFTO — 5-Year Equity Curve (949 Trades · 2021–2026)",
+                      fontsize=13, color="#F0B90B", pad=10, fontweight="bold")
+
+        # Drawdown
+        ax2.fill_between(x, dd, 0, color="#F85149", alpha=0.4)
+        ax2.plot(x, dd, color="#F85149", linewidth=1)
+        ax2.set_ylabel("Drawdown (₹L)", fontsize=9, labelpad=6)
+        ax2.yaxis.set_major_formatter(mticker.FuncFormatter(
+            lambda v, _: f"₹{v:.1f}L"))
+        ax2.set_xlabel("Trade #", fontsize=9)
+        ax2.grid(True)
+        ax2.set_xlim(0, len(df) - 1)
+
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=150,
+                    facecolor="#0D1117", bbox_inches="tight")
+        buf.seek(0)
+        plt.close(fig)
+    return buf
+
+
+def make_monthly_chart(monthly):
+    """Monthly P&L bar chart, dark theme."""
+    with plt.rc_context(MPL_STYLE):
+        fig, ax = plt.subplots(figsize=(12, 4.5))
+
+        pnl  = monthly["pnl"].values / 1000    # in thousands
+        cols = ["#3FB950" if v >= 0 else "#F85149" for v in pnl]
+        x    = np.arange(len(pnl))
+        ax.bar(x, pnl, color=cols, width=0.7, zorder=2)
+        ax.axhline(0, color="#8B949E", linewidth=0.8)
+
+        # Year dividers
+        yrs = monthly["ym"].str[:4]
+        prev = None
+        for i, y in enumerate(yrs):
+            if y != prev:
+                if prev is not None:
+                    ax.axvline(i - 0.5, color="#30363D", linewidth=1)
+                ax.text(i, ax.get_ylim()[0] if ax.get_ylim()[0] < 0 else -max(abs(pnl))*0.15,
+                        y, color="#8B949E", fontsize=8.5, ha="left", va="top")
+                prev = y
+
+        ax.yaxis.set_major_formatter(
+            mticker.FuncFormatter(lambda v, _: f"₹{v:.0f}K"))
+        ax.set_xticks([])
+        ax.set_title("Monthly P&L — 58 Months (Jan 2021 – Apr 2026)",
+                     fontsize=12, color="#F0B90B", pad=10, fontweight="bold")
+        ax.grid(axis="y", zorder=1)
+
+        # Avg line
+        avg = pnl.mean()
+        ax.axhline(avg, color="#F0B90B", linewidth=1.2, linestyle="--", alpha=0.7)
+        ax.text(len(pnl) - 1, avg + abs(pnl).max() * 0.03,
+                f"Avg ₹{avg:.0f}K", color="#F0B90B", fontsize=8,
+                ha="right")
+
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=150,
+                    facecolor="#0D1117", bbox_inches="tight")
+        buf.seek(0)
+        plt.close(fig)
+    return buf
+
+
+def make_agent_emblem(name, color_hex, letter, accent="circle"):
+    """
+    Create a circular agent badge PNG.
+    accent: 'bolt' | 'star' | 'web' | 'ring' | 'hour' | 'target' | 'fist' | 'circle'
+    """
+    fig, ax = plt.subplots(figsize=(2.4, 2.4), dpi=130)
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    fig.patch.set_facecolor("white")
+
+    # Shadow
+    shadow = MplCircle((52, 48), 44, color="#00000025", zorder=1)
+    ax.add_patch(shadow)
+    # Background
+    main = MplCircle((50, 50), 43, color=color_hex, zorder=2)
+    ax.add_patch(main)
+    # Gold rim
+    rim = MplCircle((50, 50), 43, fill=False,
+                    edgecolor="#F0B90B", linewidth=2.5, zorder=3)
+    ax.add_patch(rim)
+    # Inner subtle ring
+    inner = MplCircle((50, 50), 37, fill=False,
+                      edgecolor=(1, 1, 1, 0.15), linewidth=1, zorder=3)
+    ax.add_patch(inner)
+
+    # ── Accent shapes ─────────────────────────────────────────────────────
+    if accent == "bolt":            # THOR — lightning bolt
+        bolt_x = [46, 54, 49, 57, 43, 51, 46]
+        bolt_y = [70, 70, 55, 55, 35, 35, 70]
+        ax.fill(bolt_x, bolt_y, color="#F0B90B", alpha=0.9, zorder=3)
+        ax.plot(bolt_x, bolt_y, color="#C8860A", linewidth=0.8, zorder=4)
+
+    elif accent == "fist":          # HULK — two horizontal bars
+        for dy in [3, -3]:
+            rect = FancyBboxPatch((32, 47+dy*3), 36, 5,
+                                  boxstyle="round,pad=0.5",
+                                  color=(1,1,1,0.2), zorder=3)
+            ax.add_patch(rect)
+
+    elif accent == "ring":          # IRON MAN — arc reactor rings
+        for r, alpha in [(28, 0.35), (20, 0.25), (10, 0.4)]:
+            c = MplCircle((50, 50), r, fill=False,
+                          edgecolor="#F0B90B", linewidth=1.5, alpha=alpha, zorder=3)
+            ax.add_patch(c)
+        # Center dot
+        dot = MplCircle((50, 50), 5, color="#F0B90B", alpha=0.8, zorder=4)
+        ax.add_patch(dot)
+
+    elif accent == "star":          # CAPTAIN — star
+        star_pts = []
+        for i in range(10):
+            angle = np.pi/2 + i * 2*np.pi/10
+            r = 22 if i % 2 == 0 else 10
+            star_pts.append([50 + r*np.cos(angle), 50 + r*np.sin(angle)])
+        xs, ys = zip(*star_pts)
+        ax.fill(xs, ys, color="#F0B90B", alpha=0.35, zorder=3)
+        ax.plot(list(xs)+[xs[0]], list(ys)+[ys[0]],
+                color="#F0B90B", alpha=0.6, linewidth=1, zorder=4)
+
+    elif accent == "web":           # SPIDER-MAN — web lines
+        cx, cy = 50, 50
+        for angle in np.linspace(0, np.pi*2, 8, endpoint=False):
+            ax.plot([cx, cx + 38*np.cos(angle)],
+                    [cy, cy + 38*np.sin(angle)],
+                    color=(1,1,1,0.15), linewidth=0.8, zorder=3)
+        for r in [10, 20, 30, 38]:
+            c = MplCircle((cx, cy), r, fill=False,
+                          edgecolor=(1,1,1,0.12), linewidth=0.8, zorder=3)
+            ax.add_patch(c)
+
+    elif accent == "hour":          # BLACK WIDOW — hourglass
+        tri_t = plt.Polygon([[38,72],[62,72],[50,55]], closed=True,
+                             color=(1,1,1,0.3), zorder=3)
+        tri_b = plt.Polygon([[38,28],[62,28],[50,45]], closed=True,
+                             color=(1,1,1,0.3), zorder=3)
+        ax.add_patch(tri_t)
+        ax.add_patch(tri_b)
+
+    elif accent == "target":        # HAWKEYE — bullseye + crosshair
+        for r, alpha in [(30, 0.15), (20, 0.20), (10, 0.30)]:
+            c = MplCircle((50, 50), r, fill=False,
+                          edgecolor="#F0B90B", linewidth=1.5, alpha=alpha, zorder=3)
+            ax.add_patch(c)
+        ax.plot([50, 50], [22, 78], color="#F0B90B", alpha=0.3, linewidth=1, zorder=3)
+        ax.plot([22, 78], [50, 50], color="#F0B90B", alpha=0.3, linewidth=1, zorder=3)
+
+    # Large letter
+    ax.text(50, 53, letter, fontsize=44, color="white",
+            ha="center", va="center", fontweight="bold",
+            fontfamily="DejaVu Sans", zorder=5,
+            path_effects=[mpe.withStroke(linewidth=2, foreground=color_hex)])
+
+    # Agent name at bottom arc
+    ax.text(50, 15, name, fontsize=8.5, color="#F0B90B",
+            ha="center", va="center", fontweight="bold",
+            fontfamily="DejaVu Sans", zorder=5)
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight",
+                facecolor="white", dpi=130, pad_inches=0.05)
+    buf.seek(0)
+    plt.close(fig)
+    return buf
+
+
+def make_wr_gauge(wr_pct, color_hex, size=1.8):
+    """Mini donut gauge for win rate."""
+    fig, ax = plt.subplots(figsize=(size, size), dpi=120)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    fig.patch.set_facecolor("white")
+
+    cx, cy, r = 0.5, 0.5, 0.42
+    # Background ring
+    bg = MplWedge((cx, cy), r, 0, 360, width=0.13,
+                  facecolor="#ECEFF1", edgecolor="none", zorder=1)
+    ax.add_patch(bg)
+    # Filled arc
+    fill = MplWedge((cx, cy), r, 90 - wr_pct*3.6, 90, width=0.13,
+                    facecolor=color_hex, edgecolor="none", zorder=2)
+    ax.add_patch(fill)
+    # Center text
+    ax.text(cx, cy + 0.04, f"{wr_pct:.0f}%", fontsize=14, color="#263238",
+            ha="center", va="center", fontweight="bold")
+    ax.text(cx, cy - 0.12, "WIN RATE", fontsize=5.5, color="#607D8B",
+            ha="center", va="center")
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight",
+                facecolor="white", dpi=120, pad_inches=0.03)
+    buf.seek(0)
+    plt.close(fig)
+    return buf
+
+
+def buf_to_rl_image(buf, width_cm, height_cm=None):
+    """Convert BytesIO PNG to ReportLab Image flowable."""
+    img = RLImage(buf, width=width_cm*cm,
+                  height=height_cm*cm if height_cm else None)
+    img.hAlign = "CENTER"
+    return img
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 4 — BUILD
+# ─────────────────────────────────────────────────────────────────────────────
 def build():
+    df, ag, yr_g, monthly, max_dd = load_stats()
+
+    # Pre-generate charts once
+    equity_buf  = make_equity_chart(df)
+    monthly_buf = make_monthly_chart(monthly)
+
+    # Agent emblem configs
+    EMBLEMS = [
+        ("THOR",        THOR_C,   "T", "bolt"),
+        ("HULK",        HULK_C,   "H", "fist"),
+        ("IRON MAN",    IRON_C,   "I", "ring"),
+        ("CAPTAIN",     CAP_C,    "C", "star"),
+        ("SPIDER-MAN",  SPIDER_C, "S", "web"),
+        ("BLACK WIDOW", WIDOW_C,  "W", "hour"),
+        ("HAWKEYE",     HAWK_C,   "H", "target"),
+    ]
+    emblem_bufs = {
+        name: make_agent_emblem(name, clr, ltr, acc)
+        for name, clr, ltr, acc in EMBLEMS
+    }
+    gauge_bufs = {}
+    for name, clr, ltr, acc in EMBLEMS:
+        if name in ag.index:
+            gauge_bufs[name] = make_wr_gauge(ag.loc[name, "wr_pct"], clr)
+
     doc = SimpleDocTemplate(
         OUT_PATH, pagesize=A4,
         topMargin=1.8*cm, bottomMargin=1.8*cm,
@@ -120,711 +484,909 @@ def build():
     )
     story = []
 
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     # PAGE 1 — COVER
-    # ══════════════════════════════════════════════════════
-    # Dark cover background via table
-    cover_content = [
-        [Paragraph("", COVER_TITLE)],
+    # ══════════════════════════════════════════════════════════════
+    def cover_cell(label, value):
+        return Table([[
+            Paragraph(label, COVER_STAT_LABEL),
+            Paragraph(value, COVER_STAT_VAL),
+        ]], colWidths=[4*cm, 3.5*cm], rowHeights=[1.4*cm])
+
+    stat_boxes = Table([
+        [
+            Paragraph("TOTAL P&L",  COVER_STAT_LABEL),
+            Paragraph("WIN RATE",   COVER_STAT_LABEL),
+            Paragraph("MAX DD",     COVER_STAT_LABEL),
+            Paragraph("COVERAGE",   COVER_STAT_LABEL),
+        ],
+        [
+            Paragraph("Rs.16,96,299",COVER_STAT_VAL),
+            Paragraph("74.5%",       COVER_STAT_VAL),
+            Paragraph("2.93%",       COVER_STAT_VAL),
+            Paragraph("65.2%",       COVER_STAT_VAL),
+        ],
+    ], colWidths=[4*cm]*4, rowHeights=[0.8*cm, 1.1*cm])
+    stat_boxes.setStyle(TableStyle([
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ]))
+
+    cover_rows = [
+        [Spacer(1, 1.2*cm)],
         [Paragraph("FIFTO", COVER_TITLE)],
         [Paragraph("Fusion Intraday Formula for Tactical Options", COVER_SUB)],
+        [Spacer(1, 0.4*cm)],
+        [Paragraph("NIFTY Weekly Options  ·  Intraday Option Selling System", COVER_TAG)],
+        [Spacer(1, 0.3*cm)],
+        [Paragraph("5-Year Verified Performance  ·  2021–2026  ·  949 Trades", COVER_TAG)],
+        [Spacer(1, 1.0*cm)],
+        [Paragraph("── The Avengers of the Market ──", COVER_TAG)],
         [Spacer(1, 0.5*cm)],
-        [Paragraph("NIFTY Weekly Options · Intraday Selling System", COVER_TAG)],
-        [Paragraph("Five-Year Verified Performance · 2021–2026", COVER_TAG)],
-        [Spacer(1, 1.2*cm)],
-        [Paragraph("─── The Avengers of the Market ───", COVER_TAG)],
+        [Paragraph("7 Agents  ·  7 Zones  ·  One Systematic Framework", COVER_TAG)],
+        [Spacer(1, 1.0*cm)],
+        [stat_boxes],
         [Spacer(1, 0.8*cm)],
-        [Paragraph("7 Agents · 7 Zones · One Systematic Framework", COVER_TAG)],
-        [Spacer(1, 2.0*cm)],
-        [Paragraph("Confidential · For Authorized Recipients Only", SMALL)],
+        [Paragraph("3 of 58 months negative  ·  Zero overnight holding  ·  Fully mechanical execution", COVER_TAG)],
+        [Spacer(1, 1.4*cm)],
+        [Paragraph("Confidential  ·  For Authorized Recipients Only", SMALL)],
+        [Spacer(1, 0.6*cm)],
     ]
-    cover_table = Table([[row[0]] for row in cover_content],
-                         colWidths=[16*cm])
-    cover_table.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,-1), DARK),
-        ("TOPPADDING",    (0,0), (-1,-1), 10),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 10),
-        ("LEFTPADDING",   (0,0), (-1,-1), 30),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 30),
+    cover_tbl = Table([[r[0]] for r in cover_rows], colWidths=[16*cm])
+    cover_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), DARK),
         ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("TOPPADDING",    (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ("LEFTPADDING",   (0,0), (-1,-1), 20),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 20),
     ]))
-    story.append(cover_table)
+    story.append(cover_tbl)
     story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     # PAGE 2 — WHAT IS FIFTO
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("What is FIFTO?", H1))
     story.append(hr())
     story.append(Paragraph(
-        "FIFTO is a rules-based intraday option selling system built on NIFTY weekly options. "
-        "It identifies high-probability zones where the market is likely to reverse or stall, "
-        "and sells option premium at those zones — capturing time decay and mean reversion "
-        "with a disciplined exit framework.", BODY))
-    story.append(Spacer(1, 0.3*cm))
+        "FIFTO is a <b>rules-based intraday option selling system</b> built on NIFTY weekly "
+        "options. It identifies high-probability price zones where the market is likely to "
+        "reverse or stall, and sells option premium at those zones — capturing time decay and "
+        "mean reversion with a disciplined, fully mechanical exit framework.", BODY))
+    story.append(Spacer(1, 0.2*cm))
     story.append(Paragraph(
-        "The system combines <b>seven independent strategies</b> — each assigned to a Marvel "
-        "Avenger character — that operate across different price zones on the NIFTY chart. "
-        "Every agent has precise entry rules, fixed target, and a mechanical trailing stop-loss. "
-        "Human judgement is <b>removed from the execution loop.</b>", BODY))
+        "Seven independent strategies — each named after a Marvel Avenger — operate across "
+        "different price zones. Every agent has precise zone-based triggers, a fixed 30% "
+        "profit target, and an automated trailing stop-loss. <b>Human judgement is removed "
+        "from the execution loop.</b>", BODY))
     story.append(Spacer(1, 0.5*cm))
 
     story.append(Paragraph("Five Core Principles", H2))
     principles = [
-        ("1. Zone-First", "Never sell blindly. Every trade requires spot price to be at a defined zone (CPR, Camarilla, Fibonacci, or Pivot level)."),
-        ("2. Premium Sell Only", "All trades are option SELL (short premium). We collect theta, not pay it. CE sell = bearish signal. PE sell = bullish reversal."),
-        ("3. Mechanical Exit", "Target = 30% of entry premium. Trail SL activates automatically at -25%, -40%, -60% milestones. No manual intervention."),
-        ("4. One Trade Per Day", "Maximum one position per day. No averaging, no doubling down, no revenge trading."),
-        ("5. Capital Safety First", "Hard SL = 100% of entry premium (option doubles = immediate exit). Monthly loss months in 5 years: 3 out of 58."),
+        ("Zone-First", "Never sell blindly. Every trade requires spot price to be at a defined technical zone computed from previous-day data. No discretionary entries."),
+        ("Premium Sell Only", "All trades are option SELL (short premium). We collect theta decay, not pay it. CE sell on bearish setups. PE sell on bullish reversals."),
+        ("Mechanical Exit", "Target = 30% of entry premium. Trailing SL activates automatically at defined milestones. No manual intervention once trade is active."),
+        ("One Trade Per Day", "Maximum one active position at a time. No averaging, no doubling down, no revenge trading. Capital is protected by design."),
+        ("Capital Safety First", "Hard SL = 100% of entry premium. Negative months in 5 years: only 3 out of 58. Maximum drawdown: 2.93% of peak equity."),
     ]
-    for title, desc in principles:
-        story.append(Paragraph(f"<b>{title}</b>: {desc}", RULE_BODY))
-        story.append(Spacer(1, 0.15*cm))
-
+    for i, (title, desc) in enumerate(principles, 1):
+        story.append(Paragraph(f"<b>{i}. {title}:</b> {desc}", RULE_B))
+        story.append(Spacer(1, 0.1*cm))
     story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
-    # PAGE 3 — THE SELLING ZONES
-    # ══════════════════════════════════════════════════════
-    story.append(Paragraph("The FIFTO Selling Zones", H1))
+    # ══════════════════════════════════════════════════════════════
+    # PAGE 3 — EQUITY CURVE
+    # ══════════════════════════════════════════════════════════════
+    story.append(Paragraph("Performance Equity Curve — 2021 to 2026", H1))
     story.append(hr())
-    story.append(Paragraph(
-        "FIFTO maps seven price zones on the NIFTY chart using standard technical levels "
-        "computed from the <b>previous day's OHLC</b> data. All levels are calculated before market "
-        "open — zero forward bias.", BODY))
+
+    # Top KPI row
+    kpis = [
+        ["TOTAL P&L",      "Rs. 16,96,299"],
+        ["WIN RATE",       "74.5%"],
+        ["TRADES",         "949"],
+        ["MONTHS",         "58 (3 negative)"],
+        ["MAX DRAWDOWN",   "Rs. 46,134 (2.93%)"],
+        ["AVG/MONTH",      "Rs. 29,247"],
+    ]
+    kpi_tbl = Table(
+        [[Paragraph(f"<b>{k}</b>",
+                    S("kl", fontSize=8, textColor=SILVER, fontName="Helvetica-Bold",
+                      alignment=TA_CENTER, leading=11)),
+          Paragraph(v,
+                    S("kv", fontSize=14, textColor=GOLD, fontName="Helvetica-Bold",
+                      alignment=TA_CENTER, leading=18))]
+         for k, v in kpis],
+        colWidths=[8*cm, 8*cm], rowHeights=[1.3*cm]*6)
+    kpi_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), DARK),
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("GRID",          (0,0), (-1,-1), 1, GOLD),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ]))
+    story.append(kpi_tbl)
     story.append(Spacer(1, 0.4*cm))
 
-    zone_data = [
-        ["Zone", "Level Formula", "Direction", "Agent"],
-        ["CPR Zone\n(TC to PDH)", "TC = 2×Pivot − BC\nPDH = Previous Day High", "PE Sell\n(Bearish above)", "THOR"],
-        ["CPR Breakdown\n(PDH to R1)", "Camarilla L3 = Close − Range×0.275", "PE Sell\n(Continuation)", "HULK"],
-        ["R1 / R2\nResistance", "R1 = 2×Pivot − Low\nR2 = Pivot + Range", "PE Sell / CE Sell\n(Level rejection)", "IRON MAN"],
-        ["PDL Zone\n(Previous Day Low)", "PDL = Previous Day Low", "CE Sell\n(Bearish breakdown)", "CAPTAIN"],
-        ["TC / R1\nSweep Trap", "Price wicks above TC or R1\nthen snaps back below", "CE Sell\n(Reversal)", "SPIDER-MAN"],
-        ["Fibonacci\nMean Reversion", "l_382 = PDH − Range×0.382\nl_618 = PDH − Range×0.618", "PE Sell\n(Reversion up)", "BLACK WIDOW"],
-        ["Post-Target\nRe-entry", "60–75% pullback after\nfirst trade hits target", "Same as base\ntrade direction", "HAWKEYE"],
-    ]
-    zone_table = Table(zone_data, colWidths=[3.5*cm, 4.5*cm, 3.0*cm, 3.0*cm])
-    zone_table.setStyle(header_table_style(DARK))
-    story.append(zone_table)
-    story.append(Spacer(1, 0.5*cm))
-
-    story.append(Paragraph("Level Computation Reference", H3))
-    level_ref = [
-        ["Variable", "Formula", "Data Source"],
-        ["Pivot (PP)",   "(H + L + C) / 3",                    "Previous day H/L/C"],
-        ["BC",           "(H + L) / 2",                         "Previous day H/L"],
-        ["TC",           "2 × PP − BC",                         "Derived"],
-        ["R1",           "2 × PP − L",                          "Previous day L"],
-        ["R2",           "PP + (H − L)",                        "Previous day H/L"],
-        ["CAM L3",       "Close − Range × 0.275",               "Previous day Close + Range"],
-        ["CAM H3",       "Close + Range × 0.275",               "Previous day Close + Range"],
-        ["MRC l_618",    "PDH − Range × 0.618",                  "Previous day H/L"],
-        ["MRC l_382",    "PDH − Range × 0.382",                  "Previous day H/L"],
-        ["Futures Basis","Futures LTP − Spot LTP at 09:15",     "Live tick at open"],
-        ["IB High/Low",  "Max/Min of NIFTY spot 09:15–09:45",   "Live ticks"],
-    ]
-    ref_table = Table(level_ref, colWidths=[3*cm, 5.5*cm, 5.5*cm])
-    ref_table.setStyle(header_table_style(LIGHT_BLUE))
-    story.append(ref_table)
-
+    story.append(buf_to_rl_image(equity_buf, 16, 9.5))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(Paragraph(
+        "Equity grows consistently from 2021 to 2026. Maximum drawdown of Rs. 46,134 occurred "
+        "July 2024 and recovered within 6 weeks. Zero back-to-back loss months in 5 years.", SMALL))
     story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
-    # PAGES 4–10 — THE SEVEN AGENTS
-    # ══════════════════════════════════════════════════════
-    agents = [
+    # ══════════════════════════════════════════════════════════════
+    # PAGE 4 — SEVEN AGENTS OVERVIEW
+    # ══════════════════════════════════════════════════════════════
+    story.append(Paragraph("The Seven Agents — Overview", H1))
+    story.append(hr())
+    story.append(Paragraph(
+        "FIFTO deploys seven specialized agents — each targeting a distinct price zone. "
+        "Base agents (THOR, HULK, IRON MAN, CAPTAIN) trade on <b>base days</b>. "
+        "SPIDER-MAN and BLACK WIDOW activate on <b>blank days</b> when no base signal fires. "
+        "HAWKEYE re-enters after any base agent hits target before 13:30.", BODY))
+    story.append(Spacer(1, 0.3*cm))
+
+    # Agent overview grid with emblems
+    overview_rows = [["", "Agent", "Zone", "Opt", "Lots", "WR", "5yr P&L", "Type"]]
+    agent_configs = [
+        ("THOR",        THOR_C,   "TC–PDH / R1–R2",       "PE",   "1–3", "74.1%", "Rs.8,56,859", "Base"),
+        ("HULK",        HULK_C,   "PDH–R1 (CAM L3)",      "PE",   "1–3", "88.5%", "Rs.1,33,188", "Base"),
+        ("IRON MAN",    IRON_C,   "R1 / R2 / CAM H3",     "PE/CE","1–3", "73.0%", "Rs.1,43,107", "Base"),
+        ("CAPTAIN",     CAP_C,    "PDL / R1 / R2 (IV2)",  "CE/PE","1",   "60.9%", "Rs.18,561",   "Base"),
+        ("SPIDER-MAN",  SPIDER_C, "TC / R1 Sweep Trap",   "CE",   "1",   "69.9%", "Rs.74,935",   "Blank"),
+        ("BLACK WIDOW", WIDOW_C,  "l_382 Fibonacci",      "PE",   "2",   "80.6%", "Rs.3,07,346", "Blank"),
+        ("HAWKEYE",     HAWK_C,   "Post-target Re-entry", "Same", "1",   "71.4%", "Rs.1,62,302", "Re-entry"),
+    ]
+
+    for name, clr, zone, opt, lots, wr, pnl, typ in agent_configs:
+        emb = buf_to_rl_image(emblem_bufs[name], 1.0, 1.0)
+        wr_color = GREEN if float(wr.replace("%","")) >= 75 else \
+                   BLUE  if float(wr.replace("%","")) >= 70 else RED
+        overview_rows.append([
+            emb,
+            Paragraph(f"<b><font color='{clr}'>{name}</font></b>",
+                      S("on", fontSize=9, fontName="Helvetica-Bold",
+                        textColor=colors.HexColor(clr), leading=12)),
+            zone, opt, lots,
+            Paragraph(f"<b>{wr}</b>",
+                      S("wr", fontSize=9, fontName="Helvetica-Bold",
+                        textColor=wr_color, leading=12, alignment=TA_CENTER)),
+            pnl, typ,
+        ])
+
+    ov_tbl = Table(overview_rows,
+                   colWidths=[1.2*cm, 3.0*cm, 3.8*cm, 1.5*cm, 1.2*cm, 1.5*cm, 3.0*cm, 2.0*cm])
+    ov_ts = tblstyle(DARK)
+    ov_ts.add("ROWBACKGROUNDS", (0,1), (-1,-1), [WHITE, LIGHT_GREY])
+    ov_ts.add("ALIGN", (0,0), (-1,-1), "CENTER")
+    ov_ts.add("VALIGN", (0,0), (-1,-1), "MIDDLE")
+    ov_ts.add("TOPPADDING",    (0,1), (-1,-1), 4)
+    ov_ts.add("BOTTOMPADDING", (0,1), (-1,-1), 4)
+    ov_tbl.setStyle(ov_ts)
+    story.append(ov_tbl)
+    story.append(Spacer(1, 0.4*cm))
+    story.append(Paragraph(
+        "Base Days: THOR/HULK/IRON MAN/CAPTAIN active + HAWKEYE (if target before 13:30). "
+        "Blank Days: SPIDER-MAN and BLACK WIDOW active. "
+        "Coverage: 65.2% of 1,155 trading days.", SMALL))
+    story.append(PageBreak())
+
+    # ══════════════════════════════════════════════════════════════
+    # PAGES 5–11 — INDIVIDUAL AGENT PAGES
+    # ══════════════════════════════════════════════════════════════
+    AGENTS = [
         {
-            "name": "THOR",
-            "subtitle": "The Zone Destroyer · v17a Strategy",
-            "color": THOR_COLOR,
-            "power": "Strikes from above — sells PE when price is elevated in the TC-to-PDH zone.",
-            "zone": "TC to PDH / R1-to-R2 / within CPR",
-            "opt": "PE Sell (bearish zones)",
-            "entry": "Spot price enters the defined zone intraday. Signal candle confirms. Entry = next candle open + 2 seconds.",
-            "lots": "Score-based: 1–3 lots (based on 7-feature conviction score)",
-            "stats": [["Trades (5yr)", "WR", "Avg P&L/Trade", "Best Strategy"],
-                      ["~220", "75.3%", "Rs. 1,950", "Most frequent agent"]],
+            "name":     "THOR",
+            "subtitle": "The Zone Destroyer  ·  v17a Strategy",
+            "color":    THOR_C,
+            "role":     "Base Agent",
+            "tagline":  "Strikes from above — sells PE when price occupies the key selling zones identified through CPR and pivot analysis.",
+            "zone":     "TC to PDH  /  R1 to R2  /  CPR Interior zones",
+            "opt":      "PE Sell  (bearish price zone bias)",
+            "day_type": "Base Days only",
+            "lots":     "Score-based: 1–3 lots  (conviction scoring framework)",
+            "insight":  "THOR is the highest-contribution agent — 309 trades and Rs.8.57L P&L over 5 years. The zone classification produces 16 distinct configurations based on where the day's open falls relative to CPR and pivot levels. EMA bias confirms direction.",
+            "risk_note":"Hard SL rate 10.4% — managed by conviction score (low-score days get 1 lot only).",
             "rules": [
-                "Zone must be defined from previous day data before market open.",
-                "Spot price must enter zone (not just approach).",
-                "No trade if IB (09:15–09:45) range is expanding beyond zone.",
+                "All zones computed from previous day OHLC before market open — zero forward bias.",
+                "EMA (20-day) confirms directional bias at market open.",
                 "Entry strictly at next candle open + 2 seconds after signal.",
+                "Score filter: low-conviction days reduce lot size to minimum.",
+                "PE sell filtered when futures basis is 50–100 pts (adverse premium structure).",
                 "Maximum 1 THOR trade per day.",
             ],
         },
         {
-            "name": "HULK",
-            "subtitle": "The Breakdown Hammer · cam_l3 Strategy",
-            "color": HULK_COLOR,
-            "power": "Smashes bearish zones — sells PE when price is in the PDH-to-R1 collapse channel.",
-            "zone": "PDH to R1 (Camarilla L3 zone)",
-            "opt": "PE Sell",
-            "entry": "Price pulls up into Camarilla L3 zone. Signal candle shows rejection. Entry = next candle +2s.",
-            "lots": "Score-based: 1–3 lots",
-            "stats": [["Trades (5yr)", "WR", "Avg P&L/Trade", "Typical Exit"],
-                      ["~55", "79.4%", "Rs. 2,480", "Target (73%)"]],
+            "name":     "HULK",
+            "subtitle": "The Breakdown Hammer  ·  cam_l3 Strategy",
+            "color":    HULK_C,
+            "role":     "Base Agent",
+            "tagline":  "Smashes from the Camarilla L3 zone — sells PE when price rallies into the PDH-to-R1 resistance channel.",
+            "zone":     "PDH to R1  (Camarilla L3 level)",
+            "opt":      "PE Sell",
+            "day_type": "Base Days only",
+            "lots":     "Score-based: 1–3 lots",
+            "insight":  "HULK is the highest win-rate base agent at 88.5%, with 84.6% of trades exiting at target. The Camarilla L3 level provides a mathematically precise resistance zone derived from previous-day range and close.",
+            "risk_note":"Hard SL rate 7.7% — among the lowest of base agents.",
             "rules": [
-                "CAM L3 = Close − Range × 0.275 (computed pre-market).",
-                "Price must rally into CAM L3 zone, not gap up through it.",
-                "Best combined with bearish CPR bias (open below BC).",
-                "Score filter: at least 2 confluence features required.",
+                "CAM L3 level computed from previous day High, Low, Close before market open.",
+                "Price must rally into the zone, not gap through it.",
+                "Confirmation via multi-timeframe alignment before entry.",
+                "Score of at least 2 confluence features required for standard lot size.",
+                "Entry: next candle + 2 seconds after signal confirmation.",
+                "Maximum 1 HULK trade per day.",
             ],
         },
         {
-            "name": "IRON MAN",
-            "subtitle": "The Precision Sniper · cam_h3 / iv2_r1 / iv2_r2",
-            "color": IRON_COLOR,
-            "power": "High-precision targeting — sells PE or CE at R1/R2/CAM H3 resistance levels.",
-            "zone": "R1, R2, CAM H3 — upper resistance zones",
-            "opt": "PE Sell (at R1/R2 resistance) · CE Sell (at pdl_to_bc breakdown)",
-            "entry": "Price reaches R1 or R2 level. Candle signal confirms. Entry next candle +2s.",
-            "lots": "Score-based: 1–3 lots",
-            "stats": [["Trades (5yr)", "WR", "Avg P&L/Trade", "Best Zone"],
-                      ["~75", "73.2%", "Rs. 2,100", "pdl_to_bc (highest WR)"]],
+            "name":     "IRON MAN",
+            "subtitle": "The Precision Sniper  ·  cam_h3 / iv2_r1 / iv2_r2",
+            "color":    IRON_C,
+            "role":     "Base Agent",
+            "tagline":  "High-precision targeting at upper resistance — sells PE at R1, R2, and CAM H3 levels where supply is concentrated.",
+            "zone":     "R1  /  R2  /  CAM H3  (upper resistance band)",
+            "opt":      "PE Sell  (at resistance)  ·  CE Sell  (breakdown zones)",
+            "day_type": "Base Days only",
+            "lots":     "Score-based: 1–3 lots",
+            "insight":  "IRON MAN covers three critical upper resistance levels. The cam_h3+tc_to_pdh combination is explicitly excluded — a structural mismatch identified in backtesting where the combination produced adverse risk-reward.",
+            "risk_note":"Hard SL rate 3.2% — lowest of all base agents at resistance levels.",
             "rules": [
-                "R1 = 2×Pivot − Low (from previous day data).",
-                "CAM H3 = Close + Range × 0.275.",
-                "NOT used with cam_h3 + tc_to_pdh combination (structural mismatch — removed).",
-                "Futures basis must be between -50 and +100 pts.",
+                "R1 = 2×Pivot − Previous Day Low. R2 = Pivot + Previous Day Range.",
+                "CAM H3 = Previous Day Close + Range × 0.275.",
+                "cam_h3 + tc_to_pdh zone combination is excluded (structural conflict).",
+                "Futures basis must be within acceptable range for PE sells.",
+                "Score-based lot sizing applies — no trade below minimum conviction.",
+                "Entry: next candle open + 2 seconds.",
             ],
         },
         {
-            "name": "CAPTAIN",
-            "subtitle": "The Reliable Soldier · iv2_pdl / iv2_r1 / iv2_r2",
-            "color": CAP_COLOR,
-            "power": "Never gives up — consistent level-based entries at PDL, R1, R2. Most reliable win rate.",
-            "zone": "PDL, R1, R2 — exact key level entries",
-            "opt": "CE Sell (at PDL breakdown) · PE Sell (at R1/R2)",
-            "entry": "Spot price tags or tests key level. IV2 pattern confirms. Entry next candle +2s.",
-            "lots": "1 lot always (no conviction score for iv2, score = -1)",
-            "stats": [["Trades (5yr)", "WR", "Avg P&L/Trade", "Note"],
-                      ["~55", "72.7%", "Rs. 842", "Always 1-lot, score not applicable"]],
+            "name":     "CAPTAIN",
+            "subtitle": "The Reliable Soldier  ·  iv2_pdl Strategy",
+            "color":    CAP_C,
+            "role":     "Base Agent",
+            "tagline":  "Consistent and disciplined — level-based entries at PDL zone. One lot, every time. No exceptions.",
+            "zone":     "Previous Day Low (PDL)",
+            "opt":      "CE Sell  (at PDL breakdown)",
+            "day_type": "Base Days only",
+            "lots":     "Fixed: 1 lot always",
+            "insight":  "CAPTAIN targets the Previous Day Low — a key support-turned-resistance level. With 23 trades and Rs.18,561 P&L, this is the smallest-volume agent. It fires only when price touches the PDL with iv2 pattern confirmation. No conviction scoring — always 1 lot.",
+            "risk_note":"Hard SL rate 0.0% — no hard stop hits in 5 years of backtest.",
             "rules": [
-                "PDL = Previous day Low (pre-market calculation).",
-                "Level must be within ±0.3% of spot at entry time.",
+                "PDL = Previous Day Low (fixed level, computed pre-market).",
+                "iv2 pattern confirmation required at PDL level.",
                 "Entry between 09:16 and 15:15 only.",
-                "No re-entry if CAPTAIN already traded today.",
+                "Fixed 1-lot position — no conviction score adjustment.",
+                "No re-entry if CAPTAIN has already traded today.",
+                "EOD exit at 15:20 if target not reached.",
             ],
         },
         {
-            "name": "SPIDER-MAN",
-            "subtitle": "The Web Trap · CRT (Candle Range Theory)",
-            "color": SPIDER_COLOR,
-            "power": "Sets the trap — price sweeps above TC or R1, lures bulls, then snaps back below. CE sell.",
-            "zone": "TC or R1 — sweep and reverse pattern",
-            "opt": "CE Sell (bearish reversal after sweep)",
-            "entry": (
-                "Step 1: 15-minute 3-candle pattern — C2 wicks above TC/R1, C3 closes back below.\n"
-                "Step 2: 5-minute Heiken Ashi LTF confirmation — HA candle with upper wick + red body.\n"
-                "Step 3: Entry = next 5M candle + 2 seconds."
-            ),
-            "lots": "1 lot",
-            "stats": [["Trades (5yr)", "WR", "Avg P&L/Trade", "Active Days"],
-                      ["136", "69.9%", "Rs. 551", "Blank days only (no base signal)"]],
+            "name":     "SPIDER-MAN",
+            "subtitle": "The Web Trap  ·  CRT (Candle Range Theory)",
+            "color":    SPIDER_C,
+            "role":     "Blank Day Agent",
+            "tagline":  "Sets the trap — price sweeps above TC or R1, lures bulls, then snaps back below. CE sell on the reversal.",
+            "zone":     "TC  /  R1  (sweep-and-reverse pattern)",
+            "opt":      "CE Sell  (bearish reversal after liquidity sweep)",
+            "day_type": "Blank Days only  (no base signal that day)",
+            "lots":     "Fixed: 1 lot",
+            "insight":  "The CRT pattern is a 3-candle trap structure on the 15-minute chart, confirmed by a 5-minute Heiken Ashi setup. It identifies false breakout moves above key resistance where institutions sweep retail stop-losses before reversing.",
+            "risk_note":"Hard SL rate 3.7% — IB filter eliminates most adverse entries.",
             "rules": [
-                "ONLY fires on blank days (days without base strategy signal).",
-                "C3 of 15M pattern must close by 12:00 PM.",
-                "If IB already expanded UP before entry → trade is SKIPPED (forward bias filter).",
-                "Futures basis must be in range: −50 to +100 pts.",
-                "LTF confirmation window: 30 minutes after C3 close.",
+                "Only fires on blank days when base agents (THOR/HULK/IRON MAN/CAPTAIN) have not signaled.",
+                "15-minute and 5-minute multi-timeframe confirmation required.",
+                "IB filter: if Initial Balance (09:15–09:45) already expanded up before entry → SKIP.",
+                "Futures basis filter: −50 to +100 pts range required.",
+                "Signal must be confirmed before 12:00 PM.",
+                "Fixed 1-lot position.",
             ],
         },
         {
-            "name": "BLACK WIDOW",
-            "subtitle": "The Silent Reversal · MRC (Mean Reversion Concept)",
-            "color": WIDOW_COLOR,
-            "power": "Strikes from the shadows — PE sell when market bounces off the 38.2% Fibonacci level.",
-            "zone": "l_382 = PDH − Range × 0.382 (Fibonacci mean reversion zone)",
-            "opt": "PE Sell (bullish reversal at l_382) · <b>2 lots always</b> (WR 80.6% justifies double size)",
-            "entry": (
-                "5-minute Heiken Ashi green candle closes ABOVE l_382 level.\n"
-                "Entry = next 5M candle + 2 seconds."
-            ),
-            "lots": "<b>2 lots</b> (approved based on 80.6% WR and low hard-SL rate of 4.7%)",
-            "stats": [["Trades (5yr)", "WR", "Avg P&L/Trade (2-lot)", "Active Days"],
-                      ["170", "80.6%", "Rs. 1,808", "Blank days only"]],
+            "name":     "BLACK WIDOW",
+            "subtitle": "The Silent Reversal  ·  MRC (Mean Reversion Concept)",
+            "color":    WIDOW_C,
+            "role":     "Blank Day Agent",
+            "tagline":  "Strikes from the shadows — PE sell when market bounces off the 38.2% Fibonacci retracement of previous-day range.",
+            "zone":     "l_382 = PDH − Range × 0.382  (Fibonacci mean reversion zone)",
+            "opt":      "PE Sell  (bullish reversal at Fibonacci support)",
+            "day_type": "Blank Days only  (no base signal that day)",
+            "lots":     "<b>Fixed: 2 lots</b>  (WR 80.6% justifies double position size)",
+            "insight":  "BLACK WIDOW is the highest win-rate agent in the system at 80.6%. The Fibonacci l_382 level is a precise mean-reversion zone where institutions accumulate long positions. The 2-lot sizing was approved after rigorous risk analysis: hard SL rate 4.7%, worst 2-lot loss Rs.11,297, max drawdown unchanged.",
+            "risk_note":"Hard SL rate 4.7% (8 hard SLs in 170 trades). MRC CE trades permanently excluded — net negative over 5 years.",
             "rules": [
-                "ONLY fires on blank days (days without base strategy signal).",
-                "Previous day range must be > 50 points (skip low-volatility days).",
-                "HA candle: ha_close > l_382 AND ha_close > ha_open (green).",
-                "Signal window: 09:15–12:00 PM only.",
-                "MRC CE trades (below l_618) are EXCLUDED — net negative over 5 years.",
-                "2 lots is fixed — no score-based adjustment for this agent.",
+                "Only fires on blank days when no base agent has signaled.",
+                "Previous day range must exceed 50 points (volatility filter).",
+                "5-minute Heiken Ashi confirmation required at l_382 zone.",
+                "Signal window: 09:15 to 12:00 PM only.",
+                "MRC CE (below l_618) trades are permanently excluded.",
+                "Fixed 2-lot position — approved on WR ≥ 75% threshold.",
             ],
         },
         {
-            "name": "HAWKEYE",
-            "subtitle": "The Precision Re-entry · S4 Second Trade",
-            "color": HAWK_COLOR,
-            "power": "Never misses the second shot — re-enters after the first trade hits target, on a 60–75% pullback.",
-            "zone": "Same as base strategy (THOR/HULK/IRON MAN/CAPTAIN) — re-entry after target",
-            "opt": "Same direction as base trade (CE or PE)",
-            "entry": (
-                "Condition 1: Base trade (THOR/HULK/IRON MAN/CAPTAIN) hits 30% target before 13:30.\n"
-                "Condition 2: Option premium then pulls back 60–75% of entry price.\n"
-                "Entry = next candle after pullback is confirmed + 2 seconds."
-            ),
-            "lots": "1 lot",
-            "stats": [["Trades (5yr)", "WR", "Avg P&L/Trade", "Trigger Rate"],
-                      ["196", "71.4%", "Rs. 828", "~44% of base target days"]],
+            "name":     "HAWKEYE",
+            "subtitle": "The Precision Re-entry  ·  S4 Second Trade",
+            "color":    HAWK_C,
+            "role":     "Re-entry Agent",
+            "tagline":  "Never misses the second shot — re-enters in the same direction after the base trade hits target, on a defined pullback.",
+            "zone":     "Same as triggering base agent  (post-target pullback level)",
+            "opt":      "Same as base trade  (CE or PE)",
+            "day_type": "Base Days only  (after base agent hits 30% target)",
+            "lots":     "Fixed: 1 lot",
+            "insight":  "HAWKEYE activates only when a base agent hits the 30% target before 13:30, then waits for the option premium to pull back to 60–75% of original entry. This captures the continuation move in the same direction. 196 trades, 71.4% WR, Rs.1.62L contribution.",
+            "risk_note":"Hard SL rate 7.1% — acceptable given the second-trade continuation nature.",
             "rules": [
-                "Base trade must hit target BEFORE 13:30.",
-                "Wait for option to pull back to 60–75% of original entry price.",
-                "Same direction as original base trade.",
+                "Triggers only when a base agent exits with 'target' reason before 13:30.",
+                "Wait for option premium to pull back to 60–75% of original entry price.",
+                "Re-entry in same direction as original base trade.",
                 "Only 1 HAWKEYE re-entry per day.",
-                "EOD exit at 15:20 if not hit target.",
+                "Fixed 1-lot — no conviction score adjustment for re-entries.",
+                "EOD exit at 15:20 if target not reached.",
             ],
         },
     ]
 
-    for agent in agents:
+    for agent in AGENTS:
+        name  = agent["name"]
         color = agent["color"]
+        clr   = colors.HexColor(color)
 
-        # Agent header card
-        header_data = [[
-            Paragraph(f"⚡ {agent['name']}", AGENT_TITLE),
-            Paragraph(agent["subtitle"], AGENT_SUB),
-        ]]
-        header_table = Table(header_data, colWidths=[5*cm, 11*cm])
-        header_table.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,-1), color),
+        # ── Header bar ──
+        hdr = Table([[
+            Paragraph(f"<font color='white'><b>{name}</b></font>", AGENT_T),
+            Paragraph(agent["subtitle"],  AGENT_S),
+            Paragraph(f"<font color='#F0B90B'>{agent['role']}</font>",
+                      S("ar", fontSize=9, textColor=GOLD, fontName="Helvetica-Bold",
+                        leading=13, alignment=TA_RIGHT)),
+        ]], colWidths=[4*cm, 8*cm, 4*cm])
+        hdr.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,-1), clr),
             ("TOPPADDING",    (0,0), (-1,-1), 12),
             ("BOTTOMPADDING", (0,0), (-1,-1), 12),
-            ("LEFTPADDING",   (0,0), (-1,-1), 16),
-            ("RIGHTPADDING",  (0,0), (-1,-1), 16),
+            ("LEFTPADDING",   (0,0), (-1,-1), 14),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 14),
             ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
         ]))
-        story.append(KeepTogether([
-            header_table,
-            Spacer(1, 0.3*cm),
-        ]))
+        story.append(hdr)
+        story.append(Spacer(1, 0.25*cm))
 
-        # Power description
-        story.append(Paragraph(f"<b>Power:</b> {agent['power']}", BODY))
-        story.append(Spacer(1, 0.2*cm))
+        # ── Emblem + Stats side by side ──
+        emb_img  = buf_to_rl_image(emblem_bufs[name], 3.2, 3.2)
 
-        # Details grid
-        details = [
-            ["Zone",  agent["zone"]],
-            ["Trade", agent["opt"]],
-            ["Entry", agent["entry"]],
-            ["Lots",  agent["lots"]],
+        # Get real stats
+        if name in ag.index:
+            a        = ag.loc[name]
+            t_cnt    = int(a["trades"])
+            wr_val   = a["wr_pct"]
+            total_v  = a["total"]
+            avg_v    = a["avg"]
+            hsl_pct  = a["hard_sl_pct"]
+            tgt_pct  = a["target_pct"]
+        else:
+            t_cnt, wr_val, total_v, avg_v, hsl_pct, tgt_pct = 0, 0, 0, 0, 0, 0
+
+        wr_color = (GREEN if wr_val >= 75 else
+                    BLUE  if wr_val >= 70 else RED)
+
+        gauge_img = buf_to_rl_image(gauge_bufs.get(name, io.BytesIO()), 2.0, 2.0) \
+                    if name in gauge_bufs else Spacer(1, 2*cm)
+
+        stat_rows = [
+            ["TRADES (5yr)",  str(t_cnt)],
+            ["WIN RATE",      f"{wr_val:.1f}%"],
+            ["5yr P&L",       f"Rs.{total_v:,.0f}"],
+            ["AVG PER TRADE", f"Rs.{avg_v:,.0f}"],
+            ["TARGET EXITS",  f"{tgt_pct:.1f}%"],
+            ["HARD SL RATE",  f"{hsl_pct:.1f}%"],
         ]
-        det_table = Table(details, colWidths=[2.5*cm, 13.5*cm])
-        det_table.setStyle(TableStyle([
-            ("BACKGROUND",  (0,0), (0,-1), MID_GREY),
-            ("FONTNAME",    (0,0), (0,-1), "Helvetica-Bold"),
-            ("FONTSIZE",    (0,0), (-1,-1), 9),
-            ("FONTNAME",    (1,0), (1,-1), "Helvetica"),
-            ("GRID",        (0,0), (-1,-1), 0.4, colors.HexColor("#B0BEC5")),
-            ("TOPPADDING",  (0,0), (-1,-1), 5),
-            ("BOTTOMPADDING",(0,0),(-1,-1), 5),
-            ("LEFTPADDING", (0,0), (-1,-1), 6),
-            ("VALIGN",      (0,0), (-1,-1), "TOP"),
+        stat_tbl = Table(
+            [[Paragraph(f"<b>{k}</b>",
+                        S("sk", fontSize=8, fontName="Helvetica-Bold",
+                          textColor=SILVER, leading=12)),
+              Paragraph(v,
+                        S("sv", fontSize=10, fontName="Helvetica-Bold",
+                          textColor=DARK_GREY if k != "WIN RATE" else wr_color,
+                          leading=14, alignment=TA_RIGHT))]
+             for k, v in stat_rows],
+            colWidths=[3.0*cm, 2.5*cm])
+        stat_tbl.setStyle(TableStyle([
+            ("ROWBACKGROUNDS", (0,0), (-1,-1), [LIGHT_GREY, WHITE]),
+            ("GRID",           (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
+            ("TOPPADDING",     (0,0), (-1,-1), 4),
+            ("BOTTOMPADDING",  (0,0), (-1,-1), 4),
+            ("LEFTPADDING",    (0,0), (-1,-1), 6),
+            ("RIGHTPADDING",   (0,0), (-1,-1), 6),
+            ("VALIGN",         (0,0), (-1,-1), "MIDDLE"),
         ]))
-        story.append(det_table)
-        story.append(Spacer(1, 0.25*cm))
 
-        # Stats
-        stats_table = Table(agent["stats"],
-                             colWidths=[3.5*cm, 3*cm, 4*cm, 5.5*cm])
-        stats_table.setStyle(header_table_style(color))
-        story.append(stats_table)
-        story.append(Spacer(1, 0.25*cm))
+        right_block = Table(
+            [[stat_tbl], [Spacer(1, 0.2*cm)], [gauge_img]],
+            colWidths=[5.8*cm])
+
+        # Tagline + zone details on left
+        left_block_items = [
+            Paragraph(f"<i>{agent['tagline']}</i>",
+                      S("tl", fontSize=9.5, textColor=SILVER, fontName="Helvetica-Oblique",
+                        leading=14, spaceAfter=6)),
+            Spacer(1, 0.15*cm),
+        ]
+        details = [
+            ("Zone",     agent["zone"]),
+            ("Trade",    agent["opt"]),
+            ("Days",     agent["day_type"]),
+            ("Lots",     agent["lots"]),
+        ]
+        det_tbl = Table(details, colWidths=[1.8*cm, 8.6*cm])
+        det_tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (0,-1), MID_GREY),
+            ("FONTNAME",      (0,0), (0,-1), "Helvetica-Bold"),
+            ("FONTSIZE",      (0,0), (-1,-1), 8.5),
+            ("FONTNAME",      (1,0), (1,-1), "Helvetica"),
+            ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
+            ("TOPPADDING",    (0,0), (-1,-1), 4),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ("LEFTPADDING",   (0,0), (-1,-1), 6),
+            ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ]))
+        left_block_items.append(det_tbl)
+        left_block_items.append(Spacer(1, 0.15*cm))
+        # Insight
+        left_block_items.append(
+            Paragraph(f"<b>Performance Insight:</b> {agent['insight']}",
+                      S("ins", fontSize=8.5, textColor=DARK_GREY, fontName="Helvetica",
+                        leading=13, alignment=TA_JUSTIFY)))
+        left_block_items.append(Spacer(1, 0.1*cm))
+        left_block_items.append(
+            Paragraph(f"<b>Risk Note:</b> {agent['risk_note']}",
+                      S("rn", fontSize=8.5, textColor=RED, fontName="Helvetica",
+                        leading=12)))
+
+        left_tbl = Table(
+            [[item] for item in left_block_items],
+            colWidths=[10.4*cm])
+        left_tbl.setStyle(TableStyle([
+            ("TOPPADDING",    (0,0), (-1,-1), 1),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 1),
+            ("LEFTPADDING",   (0,0), (-1,-1), 0),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 0),
+        ]))
+
+        content_tbl = Table([[left_tbl, emb_img, right_block]],
+                             colWidths=[10.4*cm, 3.4*cm, 2.4*cm])
+        content_tbl.setStyle(TableStyle([
+            ("VALIGN",        (0,0), (-1,-1), "TOP"),
+            ("TOPPADDING",    (0,0), (-1,-1), 0),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+            ("LEFTPADDING",   (0,0), (-1,-1), 0),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 4),
+        ]))
+        story.append(content_tbl)
+        story.append(Spacer(1, 0.2*cm))
 
         # Rules
-        story.append(Paragraph("Rules & Filters:", H3))
-        for i, rule in enumerate(agent["rules"]):
-            story.append(Paragraph(f"  {i+1}. {rule}", RULE_BODY))
-        story.append(Spacer(1, 0.2*cm))
-        story.append(hr_light())
+        story.append(Paragraph(f"<b>{name} Rules &amp; Filters</b>", H3))
+        for i, rule in enumerate(agent["rules"], 1):
+            story.append(Paragraph(f"  <b>{i}.</b>  {rule}", RULE_B))
+        story.append(Spacer(1, 0.1*cm))
+        story.append(hr_thin())
         story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
-    # PAGE: UNIVERSAL ENTRY RULES
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
+    # PAGE: ENTRY RULES
+    # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Universal Entry Rules", H1))
     story.append(hr())
 
     entry_rules = [
         ("No Forward Bias",
-         "All levels (CPR, Camarilla, Fibonacci, PDH/PDL) are computed from "
-         "<b>previous day data</b> before market opens. No current-day future data is used."),
+         "All technical levels (CPR, Camarilla, Fibonacci, PDH/PDL, Pivot R1/R2) are computed "
+         "from <b>previous day data</b> before market opens at 08:55 AM. "
+         "Zero current-day or future data is used at any stage."),
         ("Entry Timing",
-         "Every entry is: <b>next candle open + 2 seconds</b>. This prevents entering "
-         "on the signal candle itself. Window: 09:16 to 15:15."),
-        ("IB Filter (CRT)",
-         "For SPIDER-MAN: if IB (Initial Balance = 09:15–09:45 range) has <b>already expanded "
-         "upward</b> before the entry time, the trade is skipped. IB expansion confirms bullish "
-         "trend — selling CE into that is against the trend."),
-        ("Futures Basis Filter (CRT)",
-         "For SPIDER-MAN: futures basis must be between <b>−50 and +100 pts</b>. Extreme basis "
-         "values indicate market dislocation — avoid selling in these conditions."),
-        ("PE Basis Filter (Base)",
-         "PE sells (THOR/HULK) are skipped when futures basis is <b>50–100 pts</b>. "
-         "This range indicates strong bullish premium — PE sellers face adverse conditions."),
+         "Every entry is: <b>next candle open + 2 seconds</b> after signal confirmation. "
+         "This prevents entering on the signal candle itself. "
+         "Intraday window: 09:16 to 15:15."),
+        ("IB Filter (SPIDER-MAN)",
+         "Initial Balance = NIFTY spot range from 09:15 to 09:45. "
+         "If IB has already expanded <b>upward</b> before the entry time, "
+         "SPIDER-MAN CE sell is skipped — selling into a confirmed uptrend is adverse."),
+        ("Futures Basis Filter",
+         "Futures basis = Futures LTP − Spot LTP at 09:15. "
+         "SPIDER-MAN: basis must be −50 to +100 pts. "
+         "Base PE sells (THOR/HULK): skipped when basis is 50–100 pts (strong bull premium)."),
         ("Blank Day Logic",
-         "SPIDER-MAN and BLACK WIDOW <b>only trade on blank days</b> — days when none of the "
-         "base agents (THOR/HULK/IRON MAN/CAPTAIN) fire. On base days, only base + HAWKEYE trade."),
+         "SPIDER-MAN and BLACK WIDOW <b>only trade on blank days</b> — "
+         "days when no base agent (THOR/HULK/IRON MAN/CAPTAIN) fires a signal. "
+         "On base-agent days, only the base agent and HAWKEYE are eligible."),
         ("Sequential Only",
-         "Only <b>one active position</b> at a time. A new signal is only considered after "
-         "the current trade exits. Exception: HAWKEYE fires after base exits with target."),
+         "One active position at a time. A new signal is only considered "
+         "<b>after the current trade exits</b> completely. "
+         "Exception: HAWKEYE can activate after base agent exits at target."),
+        ("Pre-Market Calculation",
+         "At 08:55 AM each day: fetch 45-day daily OHLC → compute EMA(20), CPR, "
+         "Camarilla, Fibonacci, Pivot levels. Score7 conviction features computed. "
+         "Day plan is locked before 09:15."),
     ]
     for title, desc in entry_rules:
         story.append(Paragraph(f"<b>{title}</b>", H3))
         story.append(Paragraph(desc, BODY))
-        story.append(Spacer(1, 0.1*cm))
-
+        story.append(Spacer(1, 0.08*cm))
     story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
-    # PAGE: UNIVERSAL EXIT RULES
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
+    # PAGE: EXIT RULES
+    # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Universal Exit Rules", H1))
     story.append(hr())
     story.append(Paragraph(
-        "All agents share the same exit framework. Once in a trade, the rules below "
-        "apply mechanically — no manual overrides.", BODY))
+        "All agents share the same exit framework. Once a position is open, "
+        "the rules below execute mechanically — no human override at any stage.", BODY))
     story.append(Spacer(1, 0.3*cm))
 
     exit_data = [
-        ["Exit Type", "Trigger", "Typical P&L"],
-        ["TARGET",     "Option price drops 30% from entry (ep × 0.70)",   "Rs. +1,500–6,000"],
-        ["TRAIL SL\n(BE)",   "Option falls 25% from entry → SL moves to entry price",        "Rs. ~0"],
-        ["TRAIL SL\n(Lock)", "Option falls 40% from entry → SL moves to 80% of entry",       "Rs. ~+300–1,500"],
-        ["TRAIL SL\n(Max)",  "Option falls 60%+ from entry → SL trails at 95% of max move",  "Rs. ~+large"],
-        ["HARD SL",    "Option price rises 100% from entry (doubles)",     "Rs. −4,000–17,000"],
-        ["EOD EXIT",   "15:20:00 — force exit regardless of position",     "Rs. −/+"],
+        ["Exit Type",          "Trigger Condition",                              "Typical P&L",  "Frequency"],
+        ["TARGET",             "Option price falls 30% from entry (ep × 0.70)", "Rs.+1,500–6,000", "63.5%"],
+        ["TRAIL SL — BE",      "Price declines 25% from entry → SL = entry",    "Rs. ~0",          "Part of 9%"],
+        ["TRAIL SL — Lock20",  "Price declines 40% from entry → SL = 80% ep",   "Rs.+300–1,500",   "Part of 9%"],
+        ["TRAIL SL — Ride",    "Price declines 60%+ → SL trails at 95% of max", "Rs.+large",        "Part of 9%"],
+        ["EOD EXIT",           "Time ≥ 15:20:00 — force close regardless",      "Rs. ±variable",   "20.7%"],
+        ["HARD SL",            "Option price doubles (ep × 2.0) — immediate exit","Rs.−4K to −17K", "6.8%"],
     ]
-    exit_table = Table(exit_data, colWidths=[3.5*cm, 8.5*cm, 4*cm])
-    exit_table.setStyle(TableStyle([
-        ("BACKGROUND",  (0,0), (-1,0), DARK),
-        ("TEXTCOLOR",   (0,0), (-1,0), WHITE),
-        ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
-        ("FONTSIZE",    (0,0), (-1,0), 10),
-        ("BACKGROUND",  (0,1), (-1,1), colors.HexColor("#E8F5E9")),  # target
-        ("BACKGROUND",  (0,2), (-1,2), LIGHT_GREY),
-        ("BACKGROUND",  (0,3), (-1,3), LIGHT_GREY),
-        ("BACKGROUND",  (0,4), (-1,4), LIGHT_GREY),
-        ("BACKGROUND",  (0,5), (-1,5), colors.HexColor("#FFEBEE")),  # hard SL
-        ("BACKGROUND",  (0,6), (-1,6), LIGHT_GREY),
-        ("ALIGN",       (0,0), (-1,-1), "CENTER"),
-        ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
-        ("FONTNAME",    (0,1), (-1,-1), "Helvetica"),
-        ("FONTSIZE",    (0,1), (-1,-1), 9),
-        ("GRID",        (0,0), (-1,-1), 0.4, colors.HexColor("#B0BEC5")),
-        ("TOPPADDING",  (0,0), (-1,-1), 7),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 7),
+    exit_tbl = Table(exit_data, colWidths=[3.5*cm, 6.5*cm, 3.0*cm, 2.5*cm])
+    exit_ts = tblstyle(DARK)
+    exit_ts.add("BACKGROUND", (0,1), (-1,1), GREEN_LIGHT)
+    exit_ts.add("BACKGROUND", (0,5), (-1,5), LIGHT_GREY)
+    exit_ts.add("BACKGROUND", (0,6), (-1,6), RED_LIGHT)
+    exit_ts.add("FONTNAME",   (0,1), (0,1),  "Helvetica-Bold")
+    exit_ts.add("FONTNAME",   (0,6), (0,6),  "Helvetica-Bold")
+    exit_ts.add("TEXTCOLOR",  (0,1), (0,1),  GREEN)
+    exit_ts.add("TEXTCOLOR",  (0,6), (0,6),  RED)
+    exit_tbl.setStyle(exit_ts)
+    story.append(exit_tbl)
+    story.append(Spacer(1, 0.4*cm))
+
+    story.append(Paragraph("Trailing Stop-Loss Mechanics", H2))
+    trail_data = [
+        ["Entry = Rs.100", "Sell 1 CE or PE at Rs.100"],
+        ["Target = Rs.70", "Price falls to Rs.70 → exit, profit = Rs.30 per unit"],
+        ["Trail 1: decline 25%", "Price falls to Rs.75 → SL moves to Rs.100 (breakeven locked)"],
+        ["Trail 2: decline 40%", "Price falls to Rs.60 → SL moves to Rs.80 (20% locked)"],
+        ["Trail 3: decline 60%", "Price falls to Rs.40 → SL trails at 95% of max gain"],
+        ["Hard SL = Rs.200",     "Price rises to Rs.200 → immediate exit, full loss capped"],
+    ]
+    tr_tbl = Table(trail_data, colWidths=[4.5*cm, 11.5*cm])
+    tr_tbl.setStyle(TableStyle([
+        ("FONTNAME",      (0,0), (0,-1), "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("FONTNAME",      (1,0), (-1,-1), "Helvetica"),
+        ("ROWBACKGROUNDS",(0,0), (-1,-1), [LIGHT_GREY, WHITE]),
+        ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("BACKGROUND",    (0,1), (-1,1), GREEN_LIGHT),
+        ("BACKGROUND",    (0,5), (-1,5), RED_LIGHT),
     ]))
-    story.append(exit_table)
-    story.append(Spacer(1, 0.5*cm))
-
-    story.append(Paragraph("Trail SL Visual", H2))
-    trail_desc = [
-        ("Entry price = 100",     "Example: Sold CE @ Rs.100"),
-        ("Target = Rs.70",        "Hit at −30% → exit with full profit"),
-        ("Trail 1: Max −25%",     "Price falls to Rs.75 → SL moved to Rs.100 (breakeven)"),
-        ("Trail 2: Max −40%",     "Price falls to Rs.60 → SL moved to Rs.80 (lock 20%)"),
-        ("Trail 3: Max −60%",     "Price falls to Rs.40 → SL trails at Rs.42 (lock 58%)"),
-        ("Hard SL: Rs.200",       "Price rises to Rs.200 → immediate exit, max loss"),
-    ]
-    for item, desc in trail_desc:
-        story.append(Paragraph(
-            f"<b>{item}</b>: {desc}", RULE_BODY))
-
-    story.append(Spacer(1, 0.5*cm))
+    story.append(tr_tbl)
+    story.append(Spacer(1, 0.3*cm))
     story.append(Paragraph(
-        "5-year exit breakdown: <b>Target 63.5%</b> · Trail SL 8.9% · EOD 20.7% · Hard SL 6.8%", BODY))
-
+        "<b>5-year exit distribution:</b> Target 63.5% · Trail SL 9.0% · EOD 20.7% · Hard SL 6.8%", BODY))
     story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     # PAGE: CONVICTION SCORING
-    # ══════════════════════════════════════════════════════
-    story.append(Paragraph("Conviction Scoring — Lot Sizing", H1))
+    # ══════════════════════════════════════════════════════════════
+    story.append(Paragraph("Conviction Scoring — Lot Sizing Framework", H1))
     story.append(hr())
     story.append(Paragraph(
-        "For base agents (THOR, HULK, IRON MAN, CAPTAIN), lot size is determined by "
+        "For base agents (THOR, HULK, IRON MAN, CAPTAIN), position size is determined by "
         "a <b>7-feature conviction score</b> computed from previous-day data. "
-        "Higher conviction = more lots = more profit when right.", BODY))
+        "Higher conviction = more lots = amplified P&L when the trade is correct.", BODY))
     story.append(Spacer(1, 0.3*cm))
 
     score_data = [
-        ["Feature", "Condition for 1 Point", "Why It Matters"],
-        ["VIX OK",           "India VIX today < 20-day MA of VIX",          "Low fear = premium sellers win"],
-        ["CPR Trend Aligned","Prev close on correct side of CPR for direction","Prior day momentum aligned"],
-        ["Consec Aligned",   "2 consecutive days close above/below CPR",    "Multi-day momentum confirmation"],
-        ["CPR Gap Aligned",  "Today's open gaps in direction of trade",      "Gap = strong directional intent"],
-        ["DTE Sweet Spot",   "Days to expiry = 3 to 5 days",                "Theta decay accelerates here"],
-        ["CPR Narrow",       "CPR width between 0.10% and 0.20% of spot",   "Narrow CPR = trending day likely"],
-        ["CPR Dir Aligned",  "CPR midpoint trending in trade direction 3 days","Macro CPR trend confirmation"],
+        ["Feature",         "Condition for 1 Point",                    "Why It Matters"],
+        ["VIX OK",          "India VIX < 20-day MA of VIX",             "Low fear environment favors premium sellers"],
+        ["CPR Trend",       "Prev close on correct side of CPR",        "Prior day momentum confirms direction"],
+        ["Consecutive",     "2 consecutive days close aligned",         "Multi-day momentum adds conviction"],
+        ["Gap Aligned",     "Today's open gaps in trade direction",     "Gap = strong institutional intent"],
+        ["DTE Sweet Spot",  "Days to expiry: 3 to 5",                   "Theta acceleration zone — max time decay"],
+        ["CPR Narrow",      "CPR width 0.10%–0.20% of spot",           "Narrow CPR signals trending day"],
+        ["CPR Directional", "CPR midpoint trending in trade direction", "Macro CPR slope confirms setup"],
     ]
-    score_table = Table(score_data, colWidths=[3.5*cm, 5.5*cm, 7*cm])
-    score_table.setStyle(header_table_style(DARK))
-    story.append(score_table)
+    sc_tbl = Table(score_data, colWidths=[3.2*cm, 5.5*cm, 7.3*cm])
+    sc_tbl.setStyle(tblstyle(DARK))
+    story.append(sc_tbl)
     story.append(Spacer(1, 0.4*cm))
 
+    story.append(Paragraph("Score to Lot Size Mapping", H2))
     lot_data = [
-        ["Score", "Lots", "Inside CPR?", "Final Lots", "Meaning"],
-        ["0–1",  "1",    "No",          "1",          "Weak setup — minimum size"],
-        ["0–1",  "1",    "Yes",         "1",          "Inside CPR reduces by 1 (min 1)"],
-        ["2–3",  "2",    "No",          "2",          "Decent setup — standard size"],
-        ["2–3",  "2",    "Yes",         "1",          "Inside CPR penalty applied"],
-        ["4–7",  "3",    "No",          "3",          "High conviction — full size"],
-        ["4–7",  "3",    "Yes",         "2",          "Inside CPR reduces slightly"],
-        ["BLACK WIDOW PE", "2", "N/A",  "2",          "Fixed 2-lot regardless of score"],
-        ["SPIDER-MAN CE",  "1", "N/A",  "1",          "Fixed 1-lot"],
-        ["HAWKEYE",        "1", "N/A",  "1",          "Fixed 1-lot"],
+        ["Score",        "Base Lots", "Inside CPR?", "Final Lots", "Meaning"],
+        ["0 – 1",        "1",         "Any",         "1",          "Low conviction — minimum exposure"],
+        ["2 – 3",        "2",         "No",          "2",          "Moderate conviction — standard size"],
+        ["2 – 3",        "2",         "Yes",         "1",          "Inside CPR penalty (−1 lot)"],
+        ["4 – 7",        "3",         "No",          "3",          "High conviction — full position"],
+        ["4 – 7",        "3",         "Yes",         "2",          "Inside CPR reduces to 2"],
+        ["Score = 6",    "—",         "—",           "SKIP",       "Score==6 excluded (historically adverse)"],
+        ["BLACK WIDOW",  "2",         "N/A",         "2",          "Fixed 2-lot — WR 80.6% justifies"],
+        ["SPIDER-MAN",   "1",         "N/A",         "1",          "Fixed 1-lot"],
+        ["HAWKEYE",      "1",         "N/A",         "1",          "Fixed 1-lot"],
     ]
-    lot_table = Table(lot_data, colWidths=[3*cm, 1.8*cm, 2.5*cm, 2.5*cm, 6.2*cm])
-    lot_table.setStyle(header_table_style(LIGHT_BLUE))
-    story.append(lot_table)
-
+    lt_tbl = Table(lot_data, colWidths=[2.8*cm, 2.0*cm, 2.5*cm, 2.5*cm, 6.2*cm])
+    lt_ts = tblstyle(LIGHT_BLUE)
+    lt_ts.add("BACKGROUND", (0,6), (-1,6), RED_LIGHT)
+    lt_ts.add("TEXTCOLOR",  (3,6), (3,6), RED)
+    lt_ts.add("FONTNAME",   (3,6), (3,6), "Helvetica-Bold")
+    lt_tbl.setStyle(lt_ts)
+    story.append(lt_tbl)
     story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
-    # PAGE: PERFORMANCE SUMMARY
-    # ══════════════════════════════════════════════════════
-    story.append(Paragraph("5-Year Performance Summary", H1))
+    # ══════════════════════════════════════════════════════════════
+    # PAGE: PERFORMANCE DETAIL
+    # ══════════════════════════════════════════════════════════════
+    story.append(Paragraph("Detailed Performance — 5-Year Breakdown", H1))
     story.append(hr())
 
-    # Top stats boxes
-    top_stats = [
-        ["TOTAL P&L", "Rs. 16,96,299"],
-        ["WIN RATE",  "74.5%"],
-        ["MAX DD",    "Rs. 46,134  (2.93%)"],
-        ["COVERAGE",  "753 / 1155 days"],
-    ]
-    top_table = Table([
-        [Paragraph(f"<b>{r[0]}</b>", S("ts", fontSize=9, textColor=SILVER, fontName="Helvetica-Bold",
-                                        alignment=TA_CENTER, leading=13)),
-         Paragraph(r[1], S("tv", fontSize=16, textColor=GOLD, fontName="Helvetica-Bold",
-                             alignment=TA_CENTER, leading=20))]
-        for r in top_stats
-    ], colWidths=[8*cm, 8*cm], rowHeights=[1.5*cm]*4)
-    top_table.setStyle(TableStyle([
-        ("BACKGROUND",  (0,0), (-1,-1), DARK),
-        ("ALIGN",       (0,0), (-1,-1), "CENTER"),
-        ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
-        ("GRID",        (0,0), (-1,-1), 1, GOLD),
-        ("TOPPADDING",  (0,0), (-1,-1), 8),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 8),
-    ]))
-    story.append(top_table)
-    story.append(Spacer(1, 0.5*cm))
-
-    # Year breakdown
     story.append(Paragraph("Year-wise Performance", H2))
-    yr_data = [
-        ["Year", "Trades", "Win Rate", "P&L (Rs.)", "Avg/Trade (Rs.)", "Trend"],
-        ["2021", "164", "72.6%", "1,93,434",  "1,179", "Base Year"],
-        ["2022", "207", "70.0%", "3,34,965",  "1,618", "+73% vs 2021"],
-        ["2023", "202", "72.3%", "2,37,289",  "1,175", "Steady"],
-        ["2024", "138", "76.8%", "2,97,083",  "2,153", "↑ Improving"],
-        ["2025", "177", "81.4%", "4,23,023",  "2,390", "↑↑ Best WR"],
-        ["2026*","61",  "77.0%", "2,10,506",  "3,451", "Partial year"],
-        ["TOTAL","949", "74.5%", "16,96,299", "1,788", "5-year avg"],
-    ]
-    yr_table = Table(yr_data, colWidths=[1.5*cm, 2*cm, 2.2*cm, 3.5*cm, 3.5*cm, 3.3*cm])
-    ts_yr = header_table_style(DARK)
-    ts_yr.add("BACKGROUND", (0, 7), (-1, 7), LIGHT_BLUE)   # total row
-    ts_yr.add("FONTNAME",   (0, 7), (-1, 7), "Helvetica-Bold")
-    ts_yr.add("TEXTCOLOR",  (0, 7), (-1, 7), WHITE)
-    yr_table.setStyle(ts_yr)
-    story.append(yr_table)
-    story.append(Spacer(1, 0.3*cm))
-    story.append(Paragraph("* 2026 is a partial year (January–April only).", SMALL))
+    yr_table_data = [["Year", "Trades", "Win Rate", "Total P&L (Rs.)", "Avg/Trade (Rs.)", "vs Prior Year"]]
+    prev_pnl = None
+    for yr, row in yr_g.iterrows():
+        trend = ""
+        if prev_pnl is not None:
+            delta = (row["total"] - prev_pnl) / abs(prev_pnl) * 100
+            trend = f"+{delta:.0f}%" if delta >= 0 else f"{delta:.0f}%"
+        yr_table_data.append([
+            f"{yr}" + (" *" if yr == 2026 else ""),
+            str(int(row["trades"])),
+            f"{row['wr']*100:.1f}%",
+            f"{row['total']:,.0f}",
+            f"{row['avg']:,.0f}",
+            trend,
+        ])
+        prev_pnl = row["total"]
+    # Total row
+    yr_table_data.append([
+        "TOTAL", "949", "74.5%", "16,96,299", "1,788", "5yr compound"
+    ])
+    yr_tbl = Table(yr_table_data, colWidths=[1.5*cm, 2*cm, 2.2*cm, 3.8*cm, 3.5*cm, 3.0*cm])
+    yr_ts = tblstyle(DARK)
+    yr_ts.add("BACKGROUND", (0,7), (-1,7), LIGHT_BLUE)
+    yr_ts.add("FONTNAME",   (0,7), (-1,7), "Helvetica-Bold")
+    yr_ts.add("TEXTCOLOR",  (0,7), (-1,7), WHITE)
+    yr_tbl.setStyle(yr_ts)
+    story.append(yr_tbl)
+    story.append(Spacer(1, 0.15*cm))
+    story.append(Paragraph("* 2026 partial year — January through April only.", SMALL))
     story.append(Spacer(1, 0.4*cm))
 
-    # Agent breakdown
-    story.append(Paragraph("Performance by Agent Group", H2))
-    agent_perf = [
-        ["Agent Group",       "Trades", "Win Rate", "Total P&L",  "Avg/Trade"],
-        ["THOR + HULK +\nIRON MAN + CAPTAIN\n(Base Agents)", "447", "74.9%",
-         "Rs. 11,51,716", "Rs. 2,577"],
-        ["HAWKEYE\n(Re-entry)", "196", "71.4%", "Rs. 1,62,302", "Rs. 828"],
-        ["SPIDER-MAN\n(CRT)", "136", "69.9%", "Rs. 74,935",  "Rs. 551"],
-        ["BLACK WIDOW\n(MRC PE, 2-lot)", "170", "80.6%", "Rs. 3,07,346", "Rs. 1,808"],
-        ["ALL AGENTS", "949", "74.5%", "Rs. 16,96,299", "Rs. 1,788"],
-    ]
-    ap_table = Table(agent_perf, colWidths=[4.5*cm, 2*cm, 2.2*cm, 3.8*cm, 3.5*cm])
-    ts_ap = header_table_style(DARK)
-    ts_ap.add("BACKGROUND", (0,5), (-1,5), LIGHT_BLUE)
-    ts_ap.add("FONTNAME",   (0,5), (-1,5), "Helvetica-Bold")
-    ts_ap.add("TEXTCOLOR",  (0,5), (-1,5), WHITE)
-    ap_table.setStyle(ts_ap)
-    story.append(ap_table)
+    story.append(Paragraph("Monthly P&L — All 58 Months", H2))
+    story.append(buf_to_rl_image(monthly_buf, 16, 6.0))
+    story.append(Spacer(1, 0.15*cm))
+    story.append(Paragraph(
+        "Green = positive month · Red = negative month · Gold dashed = monthly average (Rs.29,247). "
+        "Negative months: 3 of 58 (5.2%)", SMALL))
+    story.append(Spacer(1, 0.2*cm))
 
+    # Monthly stats
+    monthly_stats = [
+        ["Metric", "Value"],
+        ["Total months",          "58"],
+        ["Positive months",       "55 (94.8%)"],
+        ["Negative months",       "3 (5.2%)"],
+        ["Average monthly P&L",   "Rs. 29,247"],
+        ["Best month",            "Rs. 1,08,030  (March 2026)"],
+        ["Worst month",           "Rs. −20,326  (July 2024)"],
+        ["Months > Rs.50,000",    "18 (31%)"],
+    ]
+    ms_tbl = Table(monthly_stats, colWidths=[5*cm, 11*cm])
+    ms_tbl.setStyle(tblstyle(DARK_GREY))
+    story.append(ms_tbl)
     story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     # PAGE: RISK MANAGEMENT
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Risk Management", H1))
     story.append(hr())
 
     story.append(Paragraph("Capital Requirements", H2))
     cap_data = [
-        ["Requirement", "Value", "Notes"],
-        ["Minimum Capital",     "Rs. 5,00,000",  "For 1-lot base trades with adequate margin"],
-        ["Margin per lot",      "Rs. ~50,000",   "Nifty ATM option sell margin (approx.)"],
-        ["Max lots at once",    "3 lots",         "High conviction base trades only"],
-        ["Daily risk (worst)",  "Rs. ~17,000",   "1 hard SL on a 3-lot base trade"],
-        ["Monthly avg income",  "Rs. 29,247",    "Based on 58-month average"],
-        ["Negative months",     "3 out of 58",   "5.2% of months — very low"],
-        ["Worst single month",  "Rs. −24,000",   "2 hard SL in same month (rare)"],
-        ["Best single month",   "Rs. 1,08,030",  "March 2026"],
+        ["Parameter",           "Value",            "Notes"],
+        ["Minimum capital",     "Rs. 5,00,000",     "For 1-lot base trades with adequate margin buffer"],
+        ["Margin per lot",      "Rs. ~50,000",      "NIFTY ATM option sell margin (approximate)"],
+        ["Max lots at once",    "3 lots",            "High-conviction base trades only"],
+        ["Max daily risk",      "Rs. ~17,000",      "1 hard SL on a 3-lot base trade"],
+        ["Monthly avg P&L",     "Rs. 29,247",       "58-month trailing average"],
+        ["Negative months",     "3 / 58",           "5.2% of months — extremely low"],
+        ["Worst single month",  "Rs. −20,326",      "July 2024 — 2 hard SL same week"],
+        ["Best single month",   "Rs. 1,08,030",     "March 2026"],
+        ["Return on capital",   "~33.9% annualized","Based on Rs.5L capital, 5yr avg Rs.1.70L/yr"],
     ]
-    cap_table = Table(cap_data, colWidths=[5*cm, 4*cm, 7*cm])
-    cap_table.setStyle(header_table_style(DARK_GREY))
-    story.append(cap_table)
+    cap_tbl = Table(cap_data, colWidths=[4.5*cm, 4*cm, 7.5*cm])
+    cap_tbl.setStyle(tblstyle(DARK_GREY))
+    story.append(cap_tbl)
     story.append(Spacer(1, 0.4*cm))
 
-    story.append(Paragraph("What Controls Risk", H2))
+    story.append(Paragraph("Risk Control Mechanisms", H2))
     risk_controls = [
-        ("Hard SL at 2×", "Option can never lose more than 100% of entry premium on any trade."),
-        ("1 Trade Per Day", "A bad day only affects 1 trade. No compounding of losses."),
-        ("Score Filter", "Low-conviction days trade 1 lot only — limiting exposure."),
-        ("Basis Filter", "PE sells skipped when futures basis 50–100 → avoids adverse market structure."),
-        ("IB Filter", "CRT CE skipped if IB already expanded up → avoids selling into confirmed uptrend."),
-        ("EOD Exit", "No overnight holding. Fresh start every day."),
+        ("Hard SL at 2×",    "Option can never lose more than 100% of entry premium. Maximum total loss on any single trade is capped."),
+        ("1 Trade Per Day",  "A bad day impacts only 1 trade. No compounding of intraday losses. Capital protected by design."),
+        ("Score Filter",     "Low-conviction days trade 1 lot — limiting daily risk exposure automatically."),
+        ("Basis Filter",     "PE sells skipped when futures basis 50–100 pts. Avoids adverse premium structure."),
+        ("IB Filter",        "CRT CE skipped if IB already expanded upward — avoids selling into confirmed uptrend."),
+        ("Blank Day Split",  "Base agents and blank agents never overlap. Risk per day is always 1 strategy's single trade."),
+        ("EOD Forced Exit",  "No overnight holding. Fresh slate every day. No gap risk."),
     ]
     for title, desc in risk_controls:
-        story.append(Paragraph(f"<b>{title}:</b> {desc}", RULE_BODY))
-    story.append(Spacer(1, 0.3*cm))
+        story.append(Paragraph(f"<b>{title}:</b> {desc}", RULE_B))
+        story.append(Spacer(1, 0.08*cm))
 
+    story.append(Spacer(1, 0.3*cm))
     story.append(Paragraph("Drawdown Profile", H2))
     dd_data = [
-        ["Metric",             "Value"],
-        ["Maximum Drawdown",   "Rs. 46,134 (2.93% of peak equity)"],
-        ["Worst DD Period",    "Jul 15–24, 2024 — 4 trades, 2 hard SL in same week"],
-        ["Recovery Time",      "Under 2 months in all DD periods"],
-        ["DD > 5%",            "0 occurrences in 5 years"],
-        ["Consecutive losses", "Max 5 in a row (rare, isolated to volatile weeks)"],
+        ["Metric",               "Value"],
+        ["Maximum Drawdown",     "Rs. 46,134  (2.93% of peak equity)"],
+        ["Worst DD Period",      "Jul 15–24, 2024 — 4 trades, 2 hard SL in same week"],
+        ["Recovery Time",        "Under 2 months in all DD episodes"],
+        ["DD > 5% of equity",    "0 occurrences in 5 years"],
+        ["Consecutive losses",   "Max 5 in a row (isolated to volatile weeks only)"],
+        ["DD > Rs.1,00,000",     "0 occurrences — hard cap from lot-size limits"],
     ]
-    dd_table = Table(dd_data, colWidths=[5*cm, 11*cm])
-    dd_table.setStyle(header_table_style(DARK))
-    story.append(dd_table)
-
+    dd_tbl = Table(dd_data, colWidths=[5*cm, 11*cm])
+    dd_tbl.setStyle(tblstyle(DARK))
+    story.append(dd_tbl)
     story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     # PAGE: PAPER TRADING PLAN
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Paper Trading Plan — Getting Started", H1))
     story.append(hr())
     story.append(Paragraph(
         "Before going live, FIFTO recommends a <b>30-day paper trading phase</b> to validate "
         "signal detection, entry timing, and exit execution against live market data. "
-        "All results are logged to CSV — compare with backtest to confirm live-to-backtest alignment.", BODY))
+        "Results are automatically logged to CSV — compare with backtest to confirm "
+        "live-to-backtest alignment (expected: WR within ±5%, avg P&L within ±20%).", BODY))
     story.append(Spacer(1, 0.3*cm))
 
-    story.append(Paragraph("Daily Routine", H2))
+    story.append(Paragraph("Daily Operational Routine", H2))
     routine = [
-        ("08:55 AM", "Connect to broker API (Angel One SmartAPI). Fetch 45-day NIFTY daily OHLC. Compute all levels: CPR, Camarilla, MRC Fibonacci, Pivot levels, EMA20."),
-        ("09:10 AM", "Print day plan to screen — TC, BC, R1, CAM L3/H3, MRC l_382/l_618, nearest expiry, score7 features."),
-        ("09:15 AM", "Market opens. Start WebSocket for real-time NIFTY spot ticks. IB tracking begins."),
-        ("09:16 AM", "Base agents active (THOR/HULK/IRON MAN/CAPTAIN). Monitor for zone entry signals."),
-        ("09:46 AM", "IB confirmed. SPIDER-MAN and BLACK WIDOW scanners activate (blank days only)."),
-        ("Signal fires", "Fetch ATM option price. Log paper entry. Start monitoring with trade manager."),
-        ("During trade", "Trail SL updates automatically on each tick. No manual intervention needed."),
-        ("15:20 PM", "Force EOD exit if still in trade. Log result."),
-        ("15:30 PM", "Print daily summary. Compare with backtest expected P&L for the day."),
+        ("08:55 AM",    "Connect broker API. Fetch 45-day NIFTY daily OHLC. Compute all levels: CPR, Camarilla, MRC Fibonacci, EMA20, Pivot R1/R2. Lock day plan."),
+        ("09:10 AM",    "Print day summary: TC, BC, R1, R2, CAM L3/H3, MRC l_382, l_618, nearest expiry, score7 conviction features, expected agent."),
+        ("09:15 AM",    "Market open. Start real-time NIFTY spot WebSocket. IB tracking begins (tracks 09:15–09:45 range)."),
+        ("09:16 AM",    "Base agents (THOR/HULK/IRON MAN/CAPTAIN) go active. Monitor for zone entry signals."),
+        ("09:46 AM",    "IB confirmed. SPIDER-MAN and BLACK WIDOW scanners activate (blank days only)."),
+        ("On signal",   "Fetch ATM option LTP. Log paper entry. Start option tick monitoring with automated trade manager."),
+        ("During trade","Trailing SL updates on every tick — fully automated. No manual action required."),
+        ("15:20 PM",    "Force EOD exit if still in trade. Log result to CSV."),
+        ("15:30 PM",    "Print daily P&L summary. Compare with backtest benchmark."),
     ]
-    rout_data = [[t, d] for t, d in routine]
-    rout_table = Table(rout_data, colWidths=[3*cm, 13*cm])
-    rout_table.setStyle(TableStyle([
+    rout_tbl = Table([[t, d] for t, d in routine], colWidths=[3*cm, 13*cm])
+    rout_tbl.setStyle(TableStyle([
         ("BACKGROUND",    (0,0), (0,-1), MID_GREY),
         ("FONTNAME",      (0,0), (0,-1), "Helvetica-Bold"),
         ("FONTSIZE",      (0,0), (-1,-1), 9),
         ("FONTNAME",      (1,0), (1,-1), "Helvetica"),
-        ("GRID",          (0,0), (-1,-1), 0.4, colors.HexColor("#B0BEC5")),
+        ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
         ("TOPPADDING",    (0,0), (-1,-1), 5),
         ("BOTTOMPADDING", (0,0), (-1,-1), 5),
         ("LEFTPADDING",   (0,0), (-1,-1), 6),
         ("VALIGN",        (0,0), (-1,-1), "TOP"),
     ]))
-    story.append(rout_table)
+    story.append(rout_tbl)
     story.append(Spacer(1, 0.4*cm))
 
-    story.append(Paragraph("Angel One Data Requirements", H2))
+    story.append(Paragraph("Angel One SmartAPI — Data Requirements", H2))
     api_data = [
-        ["When",        "What",               "API Call",            "Used For"],
-        ["08:55 AM",    "45-day NIFTY OHLC",  "getCandleData\n(ONE_DAY)", "CPR, EMA20, PDH/PDL"],
-        ["09:15 AM",    "Futures LTP",         "ltpData()",           "Futures basis filter"],
-        ["09:15–15:20", "NIFTY spot ticks",    "WebSocket token 26000","IB, 5M/15M candles"],
-        ["On signal",   "Option LTP",          "ltpData(NFO)",        "Entry price"],
-        ["On signal",   "Option ticks",        "WebSocket (NFO token)","SL/target monitoring"],
-        ["Pre-market",  "Instrument master",   "ScripMaster JSON",    "NFO option tokens"],
+        ["When",          "What",                "API Method",             "Used For"],
+        ["08:55 AM",      "45-day NIFTY OHLC",   "getCandleData (ONE_DAY)","CPR, EMA20, PDH/PDL"],
+        ["09:15 AM",      "Futures LTP",          "ltpData()",              "Futures basis filter"],
+        ["09:15–15:20",   "NIFTY spot ticks",     "WebSocket (token 26000)","IB, 5M/15M candles"],
+        ["On signal",     "ATM option LTP",       "ltpData(NFO)",           "Entry price capture"],
+        ["On signal",     "Option ticks",         "WebSocket (NFO token)",  "SL/target monitoring"],
+        ["Pre-market",    "Instrument master",    "ScripMaster JSON",       "Option token lookup"],
     ]
-    api_table = Table(api_data, colWidths=[2.5*cm, 4*cm, 3.5*cm, 6*cm])
-    api_table.setStyle(header_table_style(DARK))
-    story.append(api_table)
-    story.append(Spacer(1, 0.3*cm))
-
-    story.append(Paragraph(
-        "Paper trading logs are saved to <b>live/paper_trades.csv</b>. "
-        "After 30 days, compare win rate, average P&L, and exit reason distribution with backtest. "
-        "Expected alignment: WR within ±5%, avg P&L within ±20%.", BODY))
-
+    api_tbl = Table(api_data, colWidths=[2.5*cm, 3.5*cm, 4.0*cm, 6.0*cm])
+    api_tbl.setStyle(tblstyle(DARK))
+    story.append(api_tbl)
     story.append(PageBreak())
 
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     # FINAL PAGE — QUICK REFERENCE
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Quick Reference Card", H1))
     story.append(hr())
 
-    qr_data = [
-        ["Agent",         "Zone",            "Opt",  "Lots",  "WR"],
-        ["THOR",          "TC–PDH / R1–R2",  "PE",   "1–3",   "75%"],
-        ["HULK",          "PDH–R1 (CAM L3)", "PE",   "1–3",   "79%"],
-        ["IRON MAN",      "R1/R2/CAM H3",    "PE/CE","1–3",   "73%"],
-        ["CAPTAIN",       "PDL/R1/R2 (IV2)", "CE/PE","1",     "73%"],
-        ["SPIDER-MAN",    "TC/R1 sweep trap","CE",   "1",     "70%"],
-        ["BLACK WIDOW",   "l_382 Fibonacci",  "PE",   "2 ✓",  "81%"],
-        ["HAWKEYE",       "Post-target re-entry","same","1",  "71%"],
-    ]
-    qr_table = Table(qr_data, colWidths=[3.5*cm, 4*cm, 1.8*cm, 2*cm, 2*cm])
-    qr_table.setStyle(header_table_style(DARK))
-    story.append(qr_table)
+    # Agent quick ref with emblems
+    qr_data = [["", "Agent", "Zone", "Opt", "Lots", "WR", "5yr P&L", "Day Type"]]
+    for name, clr, ltr, acc in EMBLEMS:
+        emb_sm = buf_to_rl_image(emblem_bufs[name], 0.75, 0.75)
+        if name in ag.index:
+            a = ag.loc[name]
+            wr_s  = f"{a['wr_pct']:.1f}%"
+            pnl_s = f"Rs.{a['total']:,.0f}"
+        else:
+            wr_s, pnl_s = "—", "—"
+        zone_map = {
+            "THOR":        "TC–PDH / R1–R2",
+            "HULK":        "PDH–R1 (CAM L3)",
+            "IRON MAN":    "R1 / R2 / CAM H3",
+            "CAPTAIN":     "PDL (IV2)",
+            "SPIDER-MAN":  "TC / R1 sweep",
+            "BLACK WIDOW": "l_382 Fibonacci",
+            "HAWKEYE":     "Post-target re-entry",
+        }
+        opt_map = {
+            "THOR":"PE","HULK":"PE","IRON MAN":"PE/CE",
+            "CAPTAIN":"CE","SPIDER-MAN":"CE","BLACK WIDOW":"PE","HAWKEYE":"Same",
+        }
+        lots_map = {
+            "THOR":"1–3","HULK":"1–3","IRON MAN":"1–3",
+            "CAPTAIN":"1","SPIDER-MAN":"1","BLACK WIDOW":"2","HAWKEYE":"1",
+        }
+        day_map = {
+            "THOR":"Base","HULK":"Base","IRON MAN":"Base",
+            "CAPTAIN":"Base","SPIDER-MAN":"Blank","BLACK WIDOW":"Blank","HAWKEYE":"Base",
+        }
+        qr_data.append([
+            emb_sm,
+            Paragraph(f"<b><font color='{clr}'>{name}</font></b>",
+                      S("qn", fontSize=8.5, fontName="Helvetica-Bold",
+                        textColor=colors.HexColor(clr), leading=12)),
+            zone_map[name], opt_map[name], lots_map[name], wr_s, pnl_s, day_map[name],
+        ])
+    qr_tbl = Table(qr_data, colWidths=[1.0*cm, 3.0*cm, 3.2*cm, 1.5*cm, 1.2*cm, 1.5*cm, 3.0*cm, 2.0*cm])
+    qr_ts = tblstyle(DARK)
+    qr_ts.add("ALIGN",  (0,0), (-1,-1), "CENTER")
+    qr_ts.add("VALIGN", (0,0), (-1,-1), "MIDDLE")
+    qr_ts.add("TOPPADDING",    (0,1), (-1,-1), 3)
+    qr_ts.add("BOTTOMPADDING", (0,1), (-1,-1), 3)
+    qr_tbl.setStyle(qr_ts)
+    story.append(qr_tbl)
     story.append(Spacer(1, 0.4*cm))
 
     story.append(Paragraph("Exit Cheat Sheet", H2))
     ex_data = [
-        ["Event",               "Action"],
-        ["Option price = ep × 0.70",    "EXIT — Target hit (+30%)"],
-        ["Max decline ≥ 25%",            "MOVE SL to entry (breakeven)"],
-        ["Max decline ≥ 40%",            "MOVE SL to ep × 0.80 (lock 20%)"],
-        ["Max decline ≥ 60%",            "TRAIL SL at 95% of max decline"],
-        ["Option price = ep × 2.0",      "EXIT — Hard SL (−100%)"],
-        ["Time ≥ 15:20:00",              "EXIT — EOD force exit"],
+        ["Trigger",                   "Action",                    "Result"],
+        ["ep × 0.70",                 "EXIT — Target hit",         "+30% of entry premium"],
+        ["Max decline ≥ 25%",         "Move SL to entry price",    "Breakeven locked"],
+        ["Max decline ≥ 40%",         "Move SL to ep × 0.80",      "20% gain locked"],
+        ["Max decline ≥ 60%",         "Trail SL at 95% of decline","Maximum profit locked"],
+        ["ep × 2.0 (price doubles)",  "EXIT — Hard SL",            "100% loss on entry"],
+        ["Time ≥ 15:20:00",           "EXIT — EOD forced exit",    "Whatever P&L is at 15:20"],
     ]
-    ex_table = Table(ex_data, colWidths=[7*cm, 9*cm])
-    ex_table.setStyle(TableStyle([
-        ("BACKGROUND",  (0,0), (-1,0), DARK),
-        ("TEXTCOLOR",   (0,0), (-1,0), WHITE),
-        ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
-        ("BACKGROUND",  (0,1), (-1,1), colors.HexColor("#E8F5E9")),
-        ("BACKGROUND",  (0,5), (-1,5), colors.HexColor("#FFEBEE")),
-        ("FONTNAME",    (0,1), (-1,-1), "Helvetica"),
-        ("FONTSIZE",    (0,0), (-1,-1), 9),
-        ("GRID",        (0,0), (-1,-1), 0.4, colors.HexColor("#B0BEC5")),
-        ("TOPPADDING",  (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 6),
-        ("LEFTPADDING", (0,0), (-1,-1), 8),
-    ]))
-    story.append(ex_table)
-    story.append(Spacer(1, 0.5*cm))
+    ex_tbl = Table(ex_data, colWidths=[5.5*cm, 5.0*cm, 5.5*cm])
+    ex_ts = TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0), DARK),
+        ("TEXTCOLOR",     (0,0), (-1,0), WHITE),
+        ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("BACKGROUND",    (0,1), (-1,1), GREEN_LIGHT),
+        ("TEXTCOLOR",     (0,1), (0,1), GREEN),
+        ("BACKGROUND",    (0,5), (-1,5), RED_LIGHT),
+        ("TEXTCOLOR",     (0,5), (0,5), RED),
+        ("FONTNAME",      (0,1), (-1,-1), "Helvetica"),
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("GRID",          (0,0), (-1,-1), 0.4, colors.HexColor("#B0BEC5")),
+        ("TOPPADDING",    (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+    ])
+    ex_tbl.setStyle(ex_ts)
+    story.append(ex_tbl)
+    story.append(Spacer(1, 0.4*cm))
 
     story.append(Paragraph(
-        "FIFTO v1.0 · Five-Year Backtest: 2021–2026 · 949 Trades · NIFTY Weekly Options · "
-        "Verified bias-free, zero forward look-ahead.", SMALL))
+        "FIFTO v1.0  ·  5-Year Backtest: 2021–2026  ·  949 Trades  ·  "
+        "NIFTY Weekly Options  ·  Zero forward look-ahead bias verified", SMALL))
 
-    # ── Build ──────────────────────────────────────────────────────────────────
     doc.build(story)
-    print(f"PDF created: {OUT_PATH}  ({os.path.getsize(OUT_PATH)//1024} KB)")
+    sz = os.path.getsize(OUT_PATH)
+    print(f"PDF created: {OUT_PATH}  ({sz//1024} KB,  ~{len(story)} elements)")
 
 
 if __name__ == "__main__":
