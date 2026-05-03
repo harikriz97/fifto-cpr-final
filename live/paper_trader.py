@@ -43,6 +43,7 @@ from indicators  import (
 )
 from signal_crt     import CRTScanner
 from signal_mrc     import MRCScanner
+from signal_base    import BaseScanner
 from trade_manager  import TradeManager, print_paper_summary
 
 logging.basicConfig(
@@ -172,12 +173,17 @@ def market_open_tasks(client: AngelClient, state: DayState):
     """
     Call at 09:15. Fetch futures basis, start IB tracking.
     """
-    # Futures basis at open
+    # Futures basis at open — find token from instrument master
     try:
-        fut_ltp  = client.get_ltp(NFO, "NIFTY25MAYFUT", "35227")  # NIFTY near-month futures
-        spot_ltp = client.get_nifty_spot()
-        state.fut_basis_pts = round(fut_ltp - spot_ltp, 2)
-        logger.info(f"  Futures basis: {state.fut_basis_pts} pts")
+        fut_token = client.find_futures_token("NIFTY")
+        if fut_token:
+            fut_ltp  = client.get_ltp(NFO, "", fut_token)
+            spot_ltp = client.get_nifty_spot()
+            state.fut_basis_pts = round(fut_ltp - spot_ltp, 2)
+            logger.info(f"  Futures basis: {state.fut_basis_pts} pts (token={fut_token})")
+        else:
+            logger.warning("  Futures token not found — basis=0")
+            state.fut_basis_pts = 0.0
     except Exception as e:
         logger.warning(f"  Futures basis fetch failed: {e} — using 0")
         state.fut_basis_pts = 0.0
