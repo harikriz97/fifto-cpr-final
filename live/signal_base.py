@@ -143,7 +143,7 @@ class BaseScanner:
         self._prev_body    = (abs(prev_close - prev_open) / prev_open * 100
                               if prev_open > 0 else 1.0)
         self._compute_thor()
-        logger.info("BaseScanner init: zone=%s bias=%s open=%.2f body=%.2f%%",
+        logger.info("BaseScanner init: zone=%s bias=%s open=%.2f body=%.4f%%",
                     self._zone, self._bias, today_open, self._prev_body)
 
     def set_ib(self, ib_high: float, ib_low: float):
@@ -256,7 +256,7 @@ class BaseScanner:
 
     def _compute_thor(self):
         if self._prev_body <= 0.10:
-            logger.info("THOR: doji day (body=%.2f%%) skip", self._prev_body)
+            logger.info("THOR: prev body=%.4f%% <= 0.10%% (doji/flat day) → skip", self._prev_body)
             return
         pvt        = self.levels
         self._zone = classify_zone(self.today_open, pvt,
