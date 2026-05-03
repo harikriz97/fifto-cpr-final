@@ -53,6 +53,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("paper_trader")
 
+# ── Strategy constants ────────────────────────────────────────────────────────
+S4_PB_LO        = 0.60       # S4 pullback: option at 60%–75% of entry price
+S4_PB_HI        = 0.75
+REENTRY_CUT     = "14:00:00" # no new S4 / contra entries after this time
+CONTRA_PULL_TOL = 30         # spot within 30 pts of SL exit = contra trigger
+CONTRA_CUT      = "14:00:00"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DAILY STATE
@@ -93,6 +100,22 @@ class DayState:
 
         # IB confirmed (after 09:45)
         self.ib_confirmed    = False
+
+        # S4 re-entry state (monitor option price after target exit)
+        self.s4_watching     = False
+        self.s4_ep           = 0.0   # original entry price of the winning trade
+        self.s4_opt          = ""    # CE / PE
+        self.s4_strike       = 0
+        self.s4_exit_time    = ""
+
+        # Contra trade state (monitor spot price after hard_sl)
+        self.contra_watching        = False
+        self.contra_opt             = ""    # opposite option (CE/PE)
+        self.contra_spot_at_exit    = 0.0
+        self.contra_start_time      = ""
+
+        # Last known spot price (used for contra entry reference)
+        self.last_spot_price = 0.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -294,39 +317,64 @@ def on_spot_tick(message: dict, state: DayState, client: AngelClient):
         ticks_df = pd.DataFrame(state.spot_ticks, columns=["time", "price"])
 
     current_time = time_str
+    state.last_spot_price = price
 
     # ── IB confirmation at 09:46 ───────────────────────────────────────────────
     if not state.ib_confirmed and current_time >= "09:46:00":
         state.ib_confirmed = True
         on_ib_confirmed(client, state)
 
-    # ── If in active trade, monitor option price ───────────────────────────────
-    # (Option price handled by separate option tick subscription)
+    # ── Contra spot monitoring (after hard_sl exit, waiting for pullback) ──────
+    if state.contra_watching and not state.trade_entered:
+        if current_time > CONTRA_CUT:
+            state.contra_watching = False
+            logger.info("Contra watch expired (past CONTRA_CUT)")
+        elif abs(price - state.contra_spot_at_exit) <= CONTRA_PULL_TOL:
+            _enter_contra(state, client, current_time, price)
+        return
 
     # ── Signal scanning (after IB confirmed, no active trade) ─────────────────
     if state.ib_confirmed and not state.trade_entered:
 
-        # Bug4: BaseScanner first (all days)
-        if state.base_scanner and not state.base_scanner.is_done():
-            sig = state.base_scanner.update(ticks_df)
-            if sig and current_time >= sig["entry_time"]:
-                state.base_signal_fired = True  # Bug6
-                state.base_scanner._done = True  # Bug5
+        # Base scanner: THOR (v17a) / HULK (cam_l3) / IRON MAN (cam_h3) / CAPTAIN (iv2)
+        bs = getattr(state, 'base_scanner', None)
+        if bs and not state.base_signal_fired:
+            sig = bs.update(ticks_df)
+            if sig and current_time >= sig.get("entry_time", ""):
+                state.base_signal_fired = True
                 _enter_trade(sig, state, client, current_time)
                 return
 
-        # CRT (blank days, only if base not fired)
+        # CRT scanner (blank days) — fires CE
         if state.crt_scanner and not state.base_signal_fired:
             sig = state.crt_scanner.update(ticks_df)
             if sig and current_time >= sig["entry_time"]:
-                _enter_trade(sig, state, client, current_time)
+                # Blank filter: skip CRT CE on trend-up days (proxy: bull bias + open above R1)
+                bs = getattr(state, 'base_scanner', None)
+                _TREND_UP_ZONES = ('r1_to_r2', 'r2_to_r3', 'r3_to_r4', 'above_r4')
+                if (bs and getattr(bs, '_bias', None) == 'bull'
+                        and getattr(bs, '_zone', '') in _TREND_UP_ZONES):
+                    logger.info("BlankFilter: skip CRT CE — trend-up day (bias=bull zone=%s)",
+                                bs._zone)
+                    state.crt_scanner.mark_done()
+                else:
+                    _enter_trade(sig, state, client, current_time)
                 return
 
         # MRC (blank days, only if base not fired)
         if state.mrc_scanner and not state.base_signal_fired:
             sig = state.mrc_scanner.update(ticks_df)
             if sig and current_time >= sig["entry_time"]:
-                _enter_trade(sig, state, client, current_time)
+                # Blank filter: skip MRC PE on normal-down days (proxy: bear bias + open below S1)
+                bs = getattr(state, 'base_scanner', None)
+                _TREND_DN_ZONES = ('s1_to_s2', 's2_to_s3', 's3_to_s4', 'below_s4')
+                if (bs and getattr(bs, '_bias', None) == 'bear'
+                        and getattr(bs, '_zone', '') in _TREND_DN_ZONES):
+                    logger.info("BlankFilter: skip MRC PE — normal-down day (bias=bear zone=%s)",
+                                bs._zone)
+                    state.mrc_scanner.mark_done()
+                else:
+                    _enter_trade(sig, state, client, current_time)
                 return
 
     # ── EOD exit if still in trade ─────────────────────────────────────────────
@@ -335,12 +383,12 @@ def on_spot_tick(message: dict, state: DayState, client: AngelClient):
             state.active_trade._exit(price, current_time, "eod")
 
 
-def on_option_tick(message: dict, state: DayState):
+def on_option_tick(message: dict, state: DayState, client: AngelClient):
     """
-    Process option LTP tick (after entry).
+    Process option LTP tick (after entry or during S4 watch).
+    After target exit  → start S4 re-entry watch (same option pulls back to 60–75% ep).
+    After hard_sl exit → start contra trade watch (spot pullback to SL exit spot).
     """
-    if not state.active_trade:
-        return
     try:
         raw_price = message.get("last_traded_price", 0)
         price = raw_price / 100.0 if raw_price > 100000 else float(raw_price)
@@ -351,11 +399,147 @@ def on_option_tick(message: dict, state: DayState):
     if price <= 0:
         return
 
+    # ── S4 pullback monitoring (option price, same subscription) ─────────────
+    if state.s4_watching and not state.trade_entered:
+        if time_str > REENTRY_CUT:
+            state.s4_watching = False
+            logger.info("S4 watch expired (past REENTRY_CUT)")
+            return
+        lo = state.s4_ep * S4_PB_LO
+        hi = state.s4_ep * S4_PB_HI
+        if lo <= price <= hi:
+            _enter_s4(state, client, time_str, price)
+        return  # only S4 watch ticks here; no other processing
+
+    if not state.active_trade:
+        return
+
     result = state.active_trade.on_tick(time_str, price)
     if result:
-        # Trade exited
         state.trade_entered = False
-        logger.info(f"Trade done. P&L: Rs.{result['pnl']:,.0f}")
+        logger.info(
+            f"Trade done. P&L: Rs.{result['pnl']:,.0f} | exit={result['exit_reason']}"
+        )
+
+        # ── After target exit: watch for S4 re-entry ─────────────────────────
+        if result["exit_reason"] == "target" and time_str < REENTRY_CUT:
+            state.s4_watching  = True
+            state.s4_ep        = result["ep"]
+            state.s4_opt       = result["opt"]
+            state.s4_strike    = result["strike"]
+            state.s4_exit_time = result["exit_time"]
+            logger.info(
+                f"S4 watching: {state.s4_opt} {state.s4_strike} ep={state.s4_ep:.0f} "
+                f"window=[{state.s4_ep * S4_PB_LO:.0f}, {state.s4_ep * S4_PB_HI:.0f}]"
+            )
+
+        # ── After hard_sl exit: watch for contra pullback ─────────────────────
+        elif result["exit_reason"] == "hard_sl" and time_str < CONTRA_CUT:
+            contra_opt = "CE" if result["opt"] == "PE" else "PE"
+            state.contra_watching     = True
+            state.contra_opt          = contra_opt
+            state.contra_spot_at_exit = state.last_spot_price
+            state.contra_start_time   = time_str
+            logger.info(
+                f"Contra watching: {contra_opt} after hard_sl | "
+                f"spot_at_exit={state.last_spot_price:.0f} "
+                f"trigger=[{state.last_spot_price - CONTRA_PULL_TOL:.0f}, "
+                f"{state.last_spot_price + CONTRA_PULL_TOL:.0f}]"
+            )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LOT BOOST HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+def _compute_dte(state: DayState) -> int:
+    """Days to nearest expiry. Uses state.expiry (format YYMMDD or YYYYMMDD)."""
+    try:
+        expiry = str(state.expiry).replace("-", "")
+        if len(expiry) == 6:
+            exp_dt = datetime.strptime("20" + expiry, "%Y%m%d")
+        else:
+            exp_dt = datetime.strptime(expiry[:8], "%Y%m%d")
+        today_dt = datetime.strptime(state.today, "%Y%m%d")
+        return max(0, (exp_dt - today_dt).days)
+    except Exception:
+        return 4   # safe default: mid-week
+
+
+def _apply_lot_boosts(signal: dict, state: DayState) -> dict:
+    """
+    Apply lot boosts before trade entry (backtest-validated improvements):
+      1. Basis S3: +1 lot when |fut_basis_pts| > 50 AND direction aligned
+      2. DTE <= 1: +1 lot on expiry day or day before (faster theta decay)
+    Max lots capped at 3.
+    """
+    lots = signal.get("lots", 1)
+    opt  = signal.get("opt", "")
+    b    = state.fut_basis_pts
+
+    # 1. Basis S3 boost
+    if abs(b) > 50:
+        aligned = (opt == "PE" and b > 0) or (opt == "CE" and b < 0)
+        if aligned:
+            lots = min(lots + 1, 3)
+            logger.info(f"  LotBoost: basis S3 ({b:+.0f} pts, {opt}) → lots={lots}")
+
+    # 2. DTE <= 1 boost
+    dte = _compute_dte(state)
+    if dte <= 1:
+        lots = min(lots + 1, 3)
+        logger.info(f"  LotBoost: DTE={dte} → lots={lots}")
+
+    signal = dict(signal)   # don't mutate original
+    signal["lots"] = lots
+    return signal
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S4 RE-ENTRY + CONTRA HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+def _enter_s4(state: DayState, client: AngelClient, current_time: str, option_price: float):
+    """
+    Enter S4 re-entry: same option (strike + opt known from previous target exit).
+    Triggered when option price pulls back to 60–75% of original entry price.
+    """
+    state.s4_watching = False
+    signal = {
+        "strategy":   "S4_reentry",
+        "signal":     "S4_2nd",
+        "opt":        state.s4_opt,
+        "strike":     state.s4_strike,
+        "entry_time": current_time,
+        "lots":       1,
+        "score":      5,
+    }
+    logger.info(
+        f"S4 re-entry triggered: {state.s4_opt} {state.s4_strike} "
+        f"@ Rs.{option_price:.0f} (ep_orig={state.s4_ep:.0f})"
+    )
+    _enter_trade(signal, state, client, current_time)
+
+
+def _enter_contra(state: DayState, client: AngelClient, current_time: str, spot_price: float):
+    """
+    Enter contra trade: opposite option after hard_sl pullback.
+    ATM strike computed from current spot price.
+    """
+    state.contra_watching = False
+    atm = get_atm(spot_price)
+    signal = {
+        "strategy":   "contra",
+        "signal":     "contra_sl",
+        "opt":        state.contra_opt,
+        "strike":     atm,
+        "entry_time": current_time,
+        "lots":       1,
+        "score":      5,
+    }
+    logger.info(
+        f"Contra entry triggered: {state.contra_opt} {atm} "
+        f"spot={spot_price:.0f} (pullback to {state.contra_spot_at_exit:.0f})"
+    )
+    _enter_trade(signal, state, client, current_time)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -368,6 +552,9 @@ def _enter_trade(signal: dict, state: DayState,
     """
     if state.trade_entered:
         return
+
+    # Apply lot boosts (basis S3 + DTE)
+    signal = _apply_lot_boosts(signal, state)
 
     strike     = signal["strike"]
     opt        = signal["opt"]
@@ -392,11 +579,13 @@ def _enter_trade(signal: dict, state: DayState,
         logger.warning(f"Option LTP is 0 for {option_symbol} — skipping")
         return
 
-    # Mark scanner as done (one trade per day)
+    # Mark all scanners done (one trade per day)
     if state.crt_scanner:
         state.crt_scanner.mark_done()
     if state.mrc_scanner:
         state.mrc_scanner.mark_done()
+    if hasattr(state, 'base_scanner'):
+        state.base_scanner._done = True
 
     # Create trade manager
     state.active_trade  = TradeManager(signal, ep)
@@ -498,7 +687,7 @@ def main():
         if token in (NIFTY_SPOT_TOKEN, NIFTY_WS_TOKEN):
             on_spot_tick(message, state, client)
         elif state.option_token and token == state.option_token:
-            on_option_tick(message, state)
+            on_option_tick(message, state, client)
 
     client.start_websocket(
         token_list=[{"exchangeType": 1, "tokens": [NIFTY_WS_TOKEN]}],
