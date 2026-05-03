@@ -184,12 +184,12 @@ def market_open_tasks(client: AngelClient, state: DayState):
     """
     # Futures basis at open — find token from instrument master
     try:
-        fut_token = client.find_futures_token("NIFTY")
-        if fut_token:
-            fut_ltp  = client.get_ltp(NFO, "", fut_token)
+        fut_token, fut_sym = client.find_futures_token("NIFTY")
+        if fut_token and fut_sym:
+            fut_ltp  = client.get_ltp(NFO, fut_sym, fut_token)  # Bug9: pass symbol
             spot_ltp = client.get_nifty_spot()
             state.fut_basis_pts = round(fut_ltp - spot_ltp, 2)
-            logger.info(f"  Futures basis: {state.fut_basis_pts} pts (token={fut_token})")
+            logger.info(f"  Futures basis: {state.fut_basis_pts} pts ({fut_sym})")
         else:
             logger.warning("  Futures token not found — basis=0")
             state.fut_basis_pts = 0.0
@@ -306,14 +306,23 @@ def on_spot_tick(message: dict, state: DayState, client: AngelClient):
     # ── Signal scanning (after IB confirmed, no active trade) ─────────────────
     if state.ib_confirmed and not state.trade_entered:
 
-        # CRT scanner (blank days) — fires CE
+        # Bug4: BaseScanner first (all days)
+        if state.base_scanner and not state.base_scanner.is_done():
+            sig = state.base_scanner.update(ticks_df)
+            if sig and current_time >= sig["entry_time"]:
+                state.base_signal_fired = True  # Bug6
+                state.base_scanner._done = True  # Bug5
+                _enter_trade(sig, state, client, current_time)
+                return
+
+        # CRT (blank days, only if base not fired)
         if state.crt_scanner and not state.base_signal_fired:
             sig = state.crt_scanner.update(ticks_df)
             if sig and current_time >= sig["entry_time"]:
                 _enter_trade(sig, state, client, current_time)
                 return
 
-        # MRC scanner (blank days) — fires PE
+        # MRC (blank days, only if base not fired)
         if state.mrc_scanner and not state.base_signal_fired:
             sig = state.mrc_scanner.update(ticks_df)
             if sig and current_time >= sig["entry_time"]:
@@ -517,9 +526,10 @@ def main():
 # TEST HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 def _test_inject_levels(state: DayState):
-    """Inject dummy levels for --test mode."""
+    """Inject dummy levels for --test mode (Bug7 fix: include BaseScanner fields)."""
     state.cpr  = {"tc": 23200, "bc": 23100, "pivot": 23150,
-                  "r1": 23350, "r2": 23550, "s1": 22950, "s2": 22750,
+                  "r1": 23350, "r2": 23550, "r3": 23750, "r4": 23950,
+                  "s1": 22950, "s2": 22750, "s3": 22550, "s4": 22350,
                   "cpr_width_pct": 0.15}
     state.cam  = {"cam_h3": 23400, "cam_l3": 22900,
                   "cam_h4": 23600, "cam_l4": 22700}
@@ -530,6 +540,20 @@ def _test_inject_levels(state: DayState):
     state.ema20 = 23100.0
     state.expiry = "20260529"
     state.fut_basis_pts = 50.0
+    # Bug7 fix: BaseScanner fields needed by on_ib_confirmed
+    state._prev_open   = 23000.0
+    state._prev_close  = 23150.0   # body = 0.65% > 0.10% → THOR will fire
+    state._vix_today   = 14.0
+    state._vix_ma20    = 15.0
+    state._dte         = 4
+    state._ohlc_history = pd.DataFrame([
+        {"date":"20260428","open":23000,"high":23400,"low":22900,"close":23150,
+         "tc":23200.0,"bc":23100.0,"cpr_mid":23150.0,"ema":23100.0},
+        {"date":"20260429","open":23100,"high":23500,"low":23000,"close":23200,
+         "tc":23250.0,"bc":23150.0,"cpr_mid":23200.0,"ema":23120.0},
+        {"date":"20260430","open":23000,"high":23400,"low":22900,"close":23150,
+         "tc":23200.0,"bc":23100.0,"cpr_mid":23150.0,"ema":23100.0},
+    ])
 
 
 if __name__ == "__main__":

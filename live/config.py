@@ -3,10 +3,10 @@ live/config.py — Angel One credentials + strategy parameters for paper_trader
 """
 
 # ── Angel One API Credentials ─────────────────────────────────────────────────
-ANGEL_API_KEY     = "k6S2VzNN"
-ANGEL_CLIENT_ID   = "pvip1030"
-ANGEL_PASSWORD    = "5131"
-ANGEL_TOTP_SECRET = "UJ2OEF4RVJQG3Q7JLRGKH4NZ3A"
+ANGEL_API_KEY     = ""   # your Angel One API key
+ANGEL_CLIENT_ID   = ""   # your client ID (e.g. A123456)
+ANGEL_PASSWORD    = ""   # your Angel One PIN
+ANGEL_TOTP_SECRET = ""   # base32 TOTP secret
 
 # ── Mode ──────────────────────────────────────────────────────────────────────
 PAPER_TRADE = True

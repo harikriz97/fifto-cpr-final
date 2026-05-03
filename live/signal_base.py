@@ -2,8 +2,8 @@
 signal_base.py — THOR / HULK / IRON MAN / CAPTAIN scanner
 ==========================================================
 THOR     — V17A pivot zone + EMA bias (fixed-time entry)
-HULK     — CAM L3 down-touch -> CE sell
-IRON MAN — CAM H3 up-touch   -> PE sell
+HULK     — CAM L3 down-touch -> PE sell  (price bounces UP, PE loses value)
+IRON MAN — CAM H3 up-touch   -> CE sell  (price rejects DOWN, CE loses value)
 CAPTAIN  — IV2 PDL/R1/R2 break -> PE/CE sell
 
 Quality cuts (backtest 127):
@@ -180,42 +180,47 @@ class BaseScanner:
             self._done = True
             return sig
 
-        # HULK: CAM L3 down
+        # HULK: CAM L3 down → PE sell (Bug1: add PE basis filter)
         if not self._hulk_done:
             t, p = _detect_touch(df, self.levels["cam_l3"], "down")
             if t:
                 self._hulk_done = True
-                et = _entry_after(t)
-                if now >= et:
-                    opt, st = CAM_L3_PARAMS["opt"], CAM_L3_PARAMS["stype"]
-                    sig = dict(strategy="cam_l3", signal="HULK", opt=opt,
-                               entry_time=et, strike=_get_strike(p, opt, st),
-                               lots=self.get_lots(opt),
-                               score=self._score7(opt).get("score", 0),
-                               tgt_pct=CAM_L3_PARAMS["tgt"],
-                               sl_pct=CAM_L3_PARAMS["sl"], zone=self._zone or "")
-                    logger.info("HULK: L3=%.2f @ %s lots=%d",
-                                self.levels["cam_l3"], t, sig["lots"])
-                    self._done = True
-                    return sig
+                if 50 <= self.fut_basis_pts <= 100:  # Bug1 fix: PE basis cut
+                    logger.info("HULK: PE basis skip %.1f", self.fut_basis_pts)
+                else:
+                    et = _entry_after(t)
+                    if now >= et:
+                        opt, st = CAM_L3_PARAMS["opt"], CAM_L3_PARAMS["stype"]
+                        lots = self.get_lots(opt)
+                        if lots == 0:   # Bug3 fix: score==6 guard
+                            self._done = True; return None
+                        sig = dict(strategy="cam_l3", signal="HULK", opt=opt,
+                                   entry_time=et, strike=_get_strike(p, opt, st),
+                                   lots=lots, score=self._score7(opt).get("score", 0),
+                                   tgt_pct=CAM_L3_PARAMS["tgt"],
+                                   sl_pct=CAM_L3_PARAMS["sl"], zone=self._zone or "")
+                        logger.info("HULK: L3=%.2f @ %s lots=%d",
+                                    self.levels["cam_l3"], t, sig["lots"])
+                        self._done = True
+                        return sig
 
-        # IRON MAN: CAM H3 up (skip if tc_to_pdh zone)
+        # IRON MAN: CAM H3 up → CE sell (Bug2: remove wrong PE basis filter)
         if not self._ironman_done and self._zone != "tc_to_pdh":
             t, p = _detect_touch(df, self.levels["cam_h3"], "up")
             if t:
                 self._ironman_done = True
                 if IRONMAN_SKIP[0] <= t <= IRONMAN_SKIP[1]:
                     logger.info("IRON MAN: skip window %s", t)
-                elif 50 <= self.fut_basis_pts <= 100:
-                    logger.info("IRON MAN: PE basis skip %.1f", self.fut_basis_pts)
-                else:
+                else:   # Bug2 fix: no basis filter for CE sells
                     et = _entry_after(t)
                     if now >= et:
                         opt, st = CAM_H3_PARAMS["opt"], CAM_H3_PARAMS["stype"]
+                        lots = self.get_lots(opt)
+                        if lots == 0:   # Bug3 fix
+                            self._done = True; return None
                         sig = dict(strategy="cam_h3", signal="IRON MAN", opt=opt,
                                    entry_time=et, strike=_get_strike(p, opt, st),
-                                   lots=self.get_lots(opt),
-                                   score=self._score7(opt).get("score", 0),
+                                   lots=lots, score=self._score7(opt).get("score", 0),
                                    tgt_pct=CAM_H3_PARAMS["tgt"],
                                    sl_pct=CAM_H3_PARAMS["sl"], zone=self._zone or "")
                         logger.info("IRON MAN: H3=%.2f @ %s lots=%d",
@@ -244,11 +249,13 @@ class BaseScanner:
                     continue
                 et = _entry_after(t)
                 if now >= et:
+                    lots = self.get_lots(opt)
+                    if lots == 0:   # Bug3 fix: score==6 guard
+                        self._done = True; self._captain_done = True; return None
                     sig = dict(strategy=f"iv2_{lvl.lower()}", signal="CAPTAIN",
                                opt=opt, entry_time=et,
                                strike=_get_strike(p, opt, params["stype"]),
-                               lots=self.get_lots(opt),
-                               score=self._score7(opt).get("score", 0),
+                               lots=lots, score=self._score7(opt).get("score", 0),
                                tgt_pct=params["tgt"], sl_pct=params["sl"],
                                zone=self._zone or "")
                     logger.info("CAPTAIN: %s=%.2f @ %s %s lots=%d",
