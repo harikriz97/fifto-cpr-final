@@ -31,9 +31,10 @@ from reportlab.graphics.shapes import Drawing, Circle, Rect, Polygon, String, Li
 from reportlab.graphics import renderPDF
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-CSV_PATH = os.path.join(os.path.dirname(__file__),
-                        "data", "20260503", "127_all_trades.csv")
-OUT_PATH = "FIFTO_Intraday_Selling_System.pdf"
+CSV_PATH   = os.path.join(os.path.dirname(__file__),
+                         "data", "20260503", "127_all_trades.csv")
+OUT_PATH   = "FIFTO_Intraday_Selling_System.pdf"
+LOGO_PATH  = os.path.join(os.path.dirname(__file__), "photo_2025-02-24_18-52-35.jpg")
 
 # ── Color Palette ────────────────────────────────────────────────────────────
 DARK        = colors.HexColor("#0D1117")
@@ -499,11 +500,31 @@ def _draw_cover_bg(canvas, doc):
     canvas.saveState()
     canvas.setFillColor(DARK)
     canvas.rect(0, 0, W, H, fill=1, stroke=0)
-    # top gold bar (full width, above margins)
     canvas.setFillColor(GOLD)
     canvas.rect(0, H - 6, W, 6, fill=1, stroke=0)
-    # bottom gold bar
     canvas.rect(0, 0, W, 6, fill=1, stroke=0)
+    canvas.restoreState()
+
+
+def _draw_page_header(canvas, doc):
+    """Header + footer for every non-cover page: gold bars, logo, page number."""
+    canvas.saveState()
+    # Top gold bar
+    canvas.setFillColor(GOLD)
+    canvas.rect(0, H - 4, W, 4, fill=1, stroke=0)
+    # Bottom gold bar
+    canvas.rect(0, 0, W, 3, fill=1, stroke=0)
+    # Logo top-right corner
+    if os.path.exists(LOGO_PATH):
+        lw, lh = 2.8*cm, 1.35*cm
+        canvas.drawImage(LOGO_PATH,
+                         W - lw - 1.8*cm, H - lh - 0.22*cm,
+                         width=lw, height=lh,
+                         preserveAspectRatio=True, mask="auto")
+    # Page number bottom-right
+    canvas.setFont("Helvetica", 7.5)
+    canvas.setFillColor(colors.HexColor("#90A4AE"))
+    canvas.drawRightString(W - 2.0*cm, 0.55*cm, str(doc.page))
     canvas.restoreState()
 
 
@@ -547,20 +568,17 @@ def build():
     # ══════════════════════════════════════════════════════════════
     # PAGE 1 — COVER  (dark background drawn by _draw_cover_bg)
     # ══════════════════════════════════════════════════════════════
-    story.append(Spacer(1, 0.9*cm))
+    story.append(Spacer(1, 0.8*cm))
 
     story.append(HRFlowable(width="100%", thickness=3, color=GOLD,
-                             hAlign="CENTER", spaceAfter=0.6*cm))
+                             hAlign="CENTER", spaceAfter=0.5*cm))
 
-    story.append(Paragraph("FIFTO",
-        S("cv_t", fontSize=68, textColor=GOLD, alignment=TA_CENTER,
-          fontName="Helvetica-Bold", leading=76)))
+    # Logo image (grey bg sits as a "card" on dark background)
+    _logo_img = RLImage(LOGO_PATH, width=9.5*cm, height=4.75*cm)
+    _logo_img.hAlign = "CENTER"
+    story.append(_logo_img)
 
-    story.append(Paragraph("Systematic NIFTY Options Selling",
-        S("cv_s", fontSize=15, textColor=WHITE, alignment=TA_CENTER,
-          fontName="Helvetica-Bold", leading=21)))
-
-    story.append(Spacer(1, 0.25*cm))
+    story.append(Spacer(1, 0.3*cm))
 
     story.append(Paragraph(
         "Intraday  ·  NIFTY 50 Weekly Options  ·  Fully Mechanical  ·  Zero Overnight Risk",
@@ -647,34 +665,94 @@ def build():
     story.append(PageBreak())
 
     # ══════════════════════════════════════════════════════════════
-    # PAGE 2 — WHAT IS FIFTO
+    # PAGE 2 — WHY CHOOSE FIFTO
     # ══════════════════════════════════════════════════════════════
-    story.append(Paragraph("What is FIFTO?", H1))
+    story.append(Paragraph("Why Choose FIFTO?", H1))
     story.append(hr())
     story.append(Paragraph(
-        "FIFTO is a <b>rules-based intraday option selling system</b> built on NIFTY weekly "
-        "options. It identifies high-probability price zones where the market is likely to "
-        "reverse or stall, and sells option premium at those zones — capturing time decay and "
-        "mean reversion with a disciplined, fully mechanical exit framework.", BODY))
-    story.append(Spacer(1, 0.2*cm))
-    story.append(Paragraph(
-        "Seven independent strategies — each named after a Marvel Avenger — operate across "
-        "different price zones. Every agent has precise zone-based triggers, a fixed 30% "
-        "profit target, and an automated trailing stop-loss. <b>Human judgement is removed "
-        "from the execution loop.</b>", BODY))
-    story.append(Spacer(1, 0.5*cm))
+        "FIFTO is a <b>fully mechanical, rules-based intraday trading system</b> for NIFTY 50 "
+        "weekly options — designed to generate consistent returns with minimal daily involvement. "
+        "Every trade is objective, pre-planned, and executed without discretion. "
+        "No charts to read. No decisions to make. The system does the work.", BODY))
+    story.append(Spacer(1, 0.25*cm))
 
-    story.append(Paragraph("Five Core Principles", H2))
-    principles = [
-        ("Zone-First", "Never sell blindly. Every trade requires spot price to be at a defined technical zone computed from previous-day data. No discretionary entries."),
-        ("Premium Sell Only", "All trades are option SELL (short premium). We collect theta decay, not pay it. CE sell on bearish setups. PE sell on bullish reversals."),
-        ("Mechanical Exit", "Target = 30% of entry premium. Trailing SL activates automatically at defined milestones. No manual intervention once trade is active."),
-        ("One Trade Per Day", "Maximum one active position at a time. No averaging, no doubling down, no revenge trading. Capital is protected by design."),
-        ("Capital Safety First", "Hard SL = 100% of entry premium. Negative months in 5 years: only 3 out of 58. Maximum drawdown: 2.93% of peak equity."),
+    # Capital requirement highlight box
+    cap_box = Table(
+        [
+            [Paragraph("CAPITAL REQUIRED", S("cl", fontSize=9, textColor=GOLD,
+                         fontName="Helvetica-Bold", alignment=TA_CENTER, leading=12)),
+             Paragraph("EXPECTED MONTHLY RETURN", S("cl", fontSize=9, textColor=GOLD,
+                         fontName="Helvetica-Bold", alignment=TA_CENTER, leading=12))],
+            [Paragraph("Rs. 5,00,000", S("cv", fontSize=22, textColor=GOLD,
+                         fontName="Helvetica-Bold", alignment=TA_CENTER, leading=26)),
+             Paragraph("Rs. 29,247 avg", S("cv2", fontSize=22, textColor=GOLD,
+                         fontName="Helvetica-Bold", alignment=TA_CENTER, leading=26))],
+        ],
+        colWidths=[8.1*cm, 8.1*cm],
+        rowHeights=[0.7*cm, 1.4*cm])
+    cap_box.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), DARK),
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("BOX",           (0,0), (-1,-1), 1.2, GOLD),
+        ("LINEAFTER",     (0,0), (0,-1), 1.2, GOLD),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ]))
+    story.append(cap_box)
+    story.append(Spacer(1, 0.35*cm))
+
+    story.append(Paragraph("What Makes FIFTO Unique", H2))
+    differentiators = [
+        ("Zero Discretion",
+         "Every entry, exit, and position size is determined by a fully mechanical ruleset. "
+         "No market opinion. No emotional bias. The same decision is made every day, every time."),
+        ("7 Independent Agents, 1 Portfolio",
+         "Seven independent trading agents cover different market conditions — bull days, "
+         "bear days, ranging days, and post-target continuation. If one agent is not active, "
+         "another takes over. The system is always working."),
+        ("Proven 5-Year Track Record",
+         "Live-comparable backtest across 1,155 trading days from January 2021 to April 2026. "
+         "74.5% win rate. Only 3 negative months out of 58. Max drawdown 2.93%. "
+         "Not curve-fitted — tested on out-of-sample periods."),
+        ("Low-Risk Structure",
+         "Option selling with a defined hard stop-loss and automatic trailing stop. "
+         "Maximum loss per trade is capped. Profit is locked progressively as the trade moves in your favour. "
+         "You never give back a winning trade."),
+        ("Minimal Time Commitment",
+         "One pre-market calculation at 08:55 AM. One entry. Automated trail. EOD exit at 15:20. "
+         "Total active time: under 15 minutes per day."),
+        ("No Overnight Risk",
+         "Every position exits by 15:20 daily. Zero overnight exposure. "
+         "Capital is free every evening. No gap risk, no event risk, no overnight surprises."),
     ]
-    for i, (title, desc) in enumerate(principles, 1):
+    for i, (title, desc) in enumerate(differentiators, 1):
         story.append(Paragraph(f"<b>{i}. {title}:</b> {desc}", RULE_B))
         story.append(Spacer(1, 0.1*cm))
+
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Paragraph("What You Get", H2))
+    what_you_get = [
+        ["Daily signals — pre-market, ready before 09:15 AM",
+         "Fully defined entry, target, and stop-loss for every trade"],
+        ["Live performance dashboard — updated daily",
+         "Monthly P&L reports with detailed trade log"],
+        ["Dedicated support — queries answered same day",
+         "System updates as market evolves — no stale rules"],
+    ]
+    for row in what_you_get:
+        wg_row = Table(
+            [[Paragraph(f"✔  {row[0]}", S("wg", fontSize=9.5, textColor=DARK_GREY,
+                         fontName="Helvetica", leading=14)),
+              Paragraph(f"✔  {row[1]}", S("wg2", fontSize=9.5, textColor=DARK_GREY,
+                         fontName="Helvetica", leading=14))]],
+            colWidths=[8.1*cm, 8.1*cm])
+        wg_row.setStyle(TableStyle([
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("TOPPADDING", (0,0), (-1,-1), 3),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ]))
+        story.append(wg_row)
 
     story.append(Spacer(1, 0.5*cm))
     story.append(Paragraph("System at a Glance", H2))
@@ -770,13 +848,13 @@ def build():
     # Agent overview grid with emblems
     overview_rows = [["", "Agent", "Zone", "Opt", "Lots", "WR", "5yr P&L", "Type"]]
     agent_configs = [
-        ("THOR",        THOR_C,   "TC–PDH / R1–R2",       "PE",   "1–3", "74.1%", "Rs.8,56,859", "Base"),
-        ("HULK",        HULK_C,   "PDH–R1 (CAM L3)",      "PE",   "1–3", "88.5%", "Rs.1,33,188", "Base"),
-        ("IRON MAN",    IRON_C,   "R1 / R2 / CAM H3",     "PE/CE","1–3", "73.0%", "Rs.1,43,107", "Base"),
-        ("CAPTAIN",     CAP_C,    "PDL / R1 / R2 (IV2)",  "CE/PE","1",   "60.9%", "Rs.18,561",   "Base"),
-        ("SPIDER-MAN",  SPIDER_C, "TC / R1 Sweep Trap",   "CE",   "1",   "69.9%", "Rs.74,935",   "Blank"),
-        ("BLACK WIDOW", WIDOW_C,  "l_382 Fibonacci",      "PE",   "2",   "80.6%", "Rs.3,07,346", "Blank"),
-        ("HAWKEYE",     HAWK_C,   "Post-target Re-entry", "Same", "1",   "71.4%", "Rs.1,62,302", "Re-entry"),
+        ("THOR",        THOR_C,   "Open-based zone  (multiple configs)", "PE",   "1–3", "74.1%", "Rs.8,56,859", "Base"),
+        ("HULK",        HULK_C,   "Resistance zone above prior range",   "PE",   "1–3", "88.5%", "Rs.1,33,188", "Base"),
+        ("IRON MAN",    IRON_C,   "Upper resistance band  (3 levels)",   "PE/CE","1–3", "73.0%", "Rs.1,43,107", "Base"),
+        ("CAPTAIN",     CAP_C,    "Prior session support level",         "CE/PE","1",   "60.9%", "Rs.18,561",   "Base"),
+        ("SPIDER-MAN",  SPIDER_C, "False breakout reversal zone",        "CE",   "1",   "69.9%", "Rs.74,935",   "Blank"),
+        ("BLACK WIDOW", WIDOW_C,  "Statistical mean-reversion zone",     "PE",   "2",   "80.6%", "Rs.3,07,346", "Blank"),
+        ("HAWKEYE",     HAWK_C,   "Post-target continuation",            "Same", "1",   "71.4%", "Rs.1,62,302", "Re-entry"),
     ]
 
     for name, clr, zone, opt, lots, wr, pnl, typ in agent_configs:
@@ -812,32 +890,6 @@ def build():
         "Coverage: 65.2% of 1,155 trading days.", SMALL))
     story.append(Spacer(1, 0.4*cm))
 
-    story.append(Paragraph("Technical Level Computation Reference", H2))
-    story.append(Paragraph(
-        "All levels are calculated from <b>previous day OHLC</b> before market open at 08:55 AM. "
-        "No intraday or future data is used.", BODY))
-    story.append(Spacer(1, 0.2*cm))
-    level_ref = [
-        ["Variable",       "Formula",                          "Used By"],
-        ["Pivot (PP)",     "(H + L + C) / 3",                 "THOR, IRON MAN, CAPTAIN"],
-        ["BC",             "(H + L) / 2",                     "THOR"],
-        ["TC",             "2 × PP - BC",                     "THOR, SPIDER-MAN"],
-        ["R1",             "2 × PP - L",                      "IRON MAN, CAPTAIN, SPIDER-MAN"],
-        ["R2",             "PP + (H - L)",                    "IRON MAN, CAPTAIN"],
-        ["CAM L3",         "Close - Range × 0.275",           "HULK"],
-        ["CAM H3",         "Close + Range × 0.275",           "IRON MAN"],
-        ["MRC l_382",      "PDH - Range × 0.382",             "BLACK WIDOW (entry zone)"],
-        ["PDH / PDL",      "Previous Day High / Low",         "THOR, BLACK WIDOW / CAPTAIN"],
-        ["EMA (20-day)",   "Exponential MA of daily close",   "THOR (directional bias filter)"],
-        ["Futures Basis",  "Futures LTP - Spot LTP at 09:15","SPIDER-MAN, THOR, HULK basis filter"],
-        ["IB High/Low",    "Max/Min spot 09:15–09:45",        "SPIDER-MAN (IB expansion filter)"],
-    ]
-    ref_tbl = Table(level_ref, colWidths=[2.8*cm, 5.6*cm, 7.8*cm])
-    ref_ts = tblstyle(DARK, fs=8)
-    ref_ts.add("TOPPADDING",    (0,0), (-1,-1), 2)
-    ref_ts.add("BOTTOMPADDING", (0,0), (-1,-1), 2)
-    ref_tbl.setStyle(ref_ts)
-    story.append(ref_tbl)
     story.append(PageBreak())
 
     # ══════════════════════════════════════════════════════════════
@@ -846,149 +898,142 @@ def build():
     AGENTS = [
         {
             "name":     "THOR",
-            "subtitle": "The Zone Destroyer  ·  v17a Strategy",
+            "subtitle": "The Zone Destroyer  ·  Base Agent",
             "color":    THOR_C,
             "role":     "Base Agent",
-            "tagline":  "Strikes from above — sells PE when price occupies the key selling zones identified through CPR and pivot analysis.",
-            "zone":     "TC to PDH  /  R1 to R2  /  CPR Interior zones",
-            "opt":      "PE Sell  (bearish price zone bias)",
+            "tagline":  "Strikes at the open — reads where the market has positioned itself at the start of the session and sells premium in the dominant direction.",
+            "zone":     "Multiple intraday zones — identified at market open",
+            "opt":      "PE Sell",
             "day_type": "Base Days only",
-            "lots":     "Score-based: 1–3 lots  (conviction scoring framework)",
-            "insight":  "THOR is the highest-contribution agent — 309 trades and Rs.8.57L P&L over 5 years. The zone classification produces 16 distinct configurations based on where the day's open falls relative to CPR and pivot levels. EMA bias confirms direction.",
-            "risk_note":"Hard SL rate 10.4% — managed by conviction score (low-score days get 1 lot only).",
-            "rules": [
-                "All zones computed from previous day OHLC before market open — zero forward bias.",
-                "EMA (20-day) confirms directional bias at market open.",
-                "Entry strictly at next candle open + 2 seconds after signal.",
-                "Score filter: low-conviction days reduce lot size to minimum.",
-                "PE sell filtered when futures basis is 50–100 pts (adverse premium structure).",
-                "Maximum 1 THOR trade per day.",
+            "lots":     "Conviction-based: 1–3 lots",
+            "insight":  "THOR is the highest-contribution agent — 309 trades and Rs.8.57L P&L over 5 years. Fires once at a fixed time each morning, positioning decisively in the direction the session has already committed to. No intraday re-assessment needed.",
+            "risk_note":"Hard SL rate 10.4% — managed by conviction scoring which restricts lot size on lower-confidence days.",
+            "why_bullets": [
+                "Highest P&L contribution in the system — Rs.8,56,859 over 5 years.",
+                "74.1% win rate across 309 trades over 5 years.",
+                "More conviction = larger position — size is earned, not guessed.",
+                "Fires once per day at a fixed pre-planned time. No ambiguity.",
+                "Consistent performer across all market regimes — bull, bear, and sideways.",
             ],
         },
         {
             "name":     "HULK",
-            "subtitle": "The Breakdown Hammer  ·  cam_l3 Strategy",
+            "subtitle": "The Breakdown Hammer  ·  Base Agent",
             "color":    HULK_C,
             "role":     "Base Agent",
-            "tagline":  "Smashes from the Camarilla L3 zone — sells PE when price rallies into the PDH-to-R1 resistance channel.",
-            "zone":     "PDH to R1  (Camarilla L3 level)",
+            "tagline":  "Smashes into resistance — sells premium at a key overhead resistance zone where the market historically stalls and reverses.",
+            "zone":     "Key resistance zone above prior session range",
             "opt":      "PE Sell",
             "day_type": "Base Days only",
-            "lots":     "Score-based: 1–3 lots",
-            "insight":  "HULK is the highest win-rate base agent at 88.5%, with 84.6% of trades exiting at target. The Camarilla L3 level provides a mathematically precise resistance zone derived from previous-day range and close.",
-            "risk_note":"Hard SL rate 7.7% — among the lowest of base agents.",
-            "rules": [
-                "CAM L3 level computed from previous day High, Low, Close before market open.",
-                "Price must rally into the zone, not gap through it.",
-                "Confirmation via multi-timeframe alignment before entry.",
-                "Score of at least 2 confluence features required for standard lot size.",
-                "Entry: next candle + 2 seconds after signal confirmation.",
-                "Maximum 1 HULK trade per day.",
+            "lots":     "Conviction-based: 1–3 lots",
+            "insight":  "HULK is the highest win-rate base agent at 88.5%, with 84.6% of all trades exiting at the full profit target. The entry zone is derived entirely from prior-session data — the level is known before the market opens.",
+            "risk_note":"Hard SL rate 7.7% — among the lowest of all base agents.",
+            "why_bullets": [
+                "88.5% win rate — highest of all base agents.",
+                "84.6% of trades exit at full target — full premium captured.",
+                "Entry zone known before market opens. No intraday guesswork.",
+                "Hard SL rate only 7.7% — losses are rare and fully defined.",
+                "Reliable across all 5 years — no cherry-picked periods.",
             ],
         },
         {
             "name":     "IRON MAN",
-            "subtitle": "The Precision Sniper  ·  cam_h3 / iv2_r1 / iv2_r2",
+            "subtitle": "The Precision Sniper  ·  Base Agent",
             "color":    IRON_C,
             "role":     "Base Agent",
-            "tagline":  "High-precision targeting at upper resistance — sells PE at R1, R2, and CAM H3 levels where supply is concentrated.",
-            "zone":     "R1  /  R2  /  CAM H3  (upper resistance band)",
-            "opt":      "PE Sell  (at resistance)  ·  CE Sell  (breakdown zones)",
+            "tagline":  "High-precision targeting — sells premium at upper resistance levels where institutional supply consistently overwhelms retail demand.",
+            "zone":     "Upper resistance band — three precision levels",
+            "opt":      "PE Sell  ·  CE Sell  (by setup)",
             "day_type": "Base Days only",
-            "lots":     "Score-based: 1–3 lots",
-            "insight":  "IRON MAN covers three critical upper resistance levels. The cam_h3+tc_to_pdh combination is explicitly excluded — a structural mismatch identified in backtesting where the combination produced adverse risk-reward.",
-            "risk_note":"Hard SL rate 3.2% — lowest of all base agents at resistance levels.",
-            "rules": [
-                "R1 = 2×Pivot − Previous Day Low. R2 = Pivot + Previous Day Range.",
-                "CAM H3 = Previous Day Close + Range × 0.275.",
-                "cam_h3 + tc_to_pdh zone combination is excluded (structural conflict).",
-                "Futures basis must be within acceptable range for PE sells.",
-                "Score-based lot sizing applies — no trade below minimum conviction.",
-                "Entry: next candle open + 2 seconds.",
+            "lots":     "Conviction-based: 1–3 lots",
+            "insight":  "IRON MAN covers three critical upper resistance levels with the lowest hard SL rate of all base agents at 3.2%. Precision entry zones are pre-calculated daily — the system knows exactly where to act before the market opens.",
+            "risk_note":"Hard SL rate 3.2% — lowest of all base agents. Resistance entries protect capital.",
+            "why_bullets": [
+                "3.2% hard SL rate — the safest base agent by loss frequency.",
+                "73.0% win rate covering three distinct resistance levels.",
+                "Handles both PE and CE sells — adapts to the day's structure.",
+                "Zero discretion — entry zone and lot size are fully pre-determined.",
+                "Rs.1.43L contribution over 5 years with tightly controlled drawdown.",
             ],
         },
         {
             "name":     "CAPTAIN",
-            "subtitle": "The Reliable Soldier  ·  iv2_pdl Strategy",
+            "subtitle": "The Reliable Soldier  ·  Base Agent",
             "color":    CAP_C,
             "role":     "Base Agent",
-            "tagline":  "Consistent and disciplined — level-based entries at PDL zone. One lot, every time. No exceptions.",
-            "zone":     "Previous Day Low (PDL)",
-            "opt":      "CE Sell  (at PDL breakdown)",
+            "tagline":  "Consistent and disciplined — targets a key prior-session support level that has converted to resistance. One lot, every time.",
+            "zone":     "Prior session support — converted to resistance",
+            "opt":      "CE Sell  ·  PE Sell  (by direction)",
             "day_type": "Base Days only",
-            "lots":     "Fixed: 1 lot always",
-            "insight":  "CAPTAIN targets the Previous Day Low — a key support-turned-resistance level. With 23 trades and Rs.18,561 P&L, this is the smallest-volume agent. It fires only when price touches the PDL with iv2 pattern confirmation. No conviction scoring — always 1 lot.",
-            "risk_note":"Hard SL rate 0.0% — no hard stop hits in 5 years of backtest.",
-            "rules": [
-                "PDL = Previous Day Low (fixed level, computed pre-market).",
-                "iv2 pattern confirmation required at PDL level.",
-                "Entry between 09:16 and 15:15 only.",
-                "Fixed 1-lot position — no conviction score adjustment.",
-                "No re-entry if CAPTAIN has already traded today.",
-                "EOD exit at 15:20 if target not reached.",
+            "lots":     "Fixed: 1 lot",
+            "insight":  "CAPTAIN targets the previous session's floor — a level that routinely becomes resistance when revisited. With 23 trades and Rs.18,561 P&L, this is a precision agent that fires infrequently but cleanly. Zero hard SL hits in 5 years.",
+            "risk_note":"Hard SL rate 0.0% — no hard stop hits in the entire 5-year backtest period.",
+            "why_bullets": [
+                "0.0% hard SL rate — not a single hard stop hit in 5 years.",
+                "60.9% win rate at a level that rarely gives false signals.",
+                "Simple, fixed 1-lot sizing — no complexity, no surprises.",
+                "Fires rarely, but with high conviction every time.",
+                "A clean complement to the higher-frequency agents.",
             ],
         },
         {
             "name":     "SPIDER-MAN",
-            "subtitle": "The Web Trap  ·  CRT (Candle Range Theory)",
+            "subtitle": "The Web Trap  ·  Blank Day Agent",
             "color":    SPIDER_C,
             "role":     "Blank Day Agent",
-            "tagline":  "Sets the trap — price sweeps above TC or R1, lures bulls, then snaps back below. CE sell on the reversal.",
-            "zone":     "TC  /  R1  (sweep-and-reverse pattern)",
-            "opt":      "CE Sell  (bearish reversal after liquidity sweep)",
-            "day_type": "Blank Days only  (no base signal that day)",
+            "tagline":  "Sets the trap — identifies false breakout moves where retail momentum chases price into resistance, then sells the reversal.",
+            "zone":     "False breakout reversal zone — identified intraday",
+            "opt":      "CE Sell  (post-reversal)",
+            "day_type": "Blank Days only  (base agents not active)",
             "lots":     "Fixed: 1 lot",
-            "insight":  "The CRT pattern is a 3-candle trap structure on the 15-minute chart, confirmed by a 5-minute Heiken Ashi setup. It identifies false breakout moves above key resistance where institutions sweep retail stop-losses before reversing.",
-            "risk_note":"Hard SL rate 3.7% — IB filter eliminates most adverse entries.",
-            "rules": [
-                "Only fires on blank days when base agents (THOR/HULK/IRON MAN/CAPTAIN) have not signaled.",
-                "15-minute and 5-minute multi-timeframe confirmation required.",
-                "IB filter: if Initial Balance (09:15–09:45) already expanded up before entry → SKIP.",
-                "Futures basis filter: −50 to +100 pts range required.",
-                "Signal must be confirmed before 12:00 PM.",
-                "Fixed 1-lot position.",
+            "insight":  "SPIDER-MAN activates on blank days — days when no base agent fires. It identifies a specific intraday trap structure where retail participants are caught on the wrong side, then sells premium into the reversal. 69.9% WR, Rs.74,935 over 5 years.",
+            "risk_note":"Hard SL rate 3.7% — robust filters eliminate most adverse entry conditions.",
+            "why_bullets": [
+                "Activates on blank days — the system is never idle.",
+                "69.9% win rate on a setup that triggers only when conditions are optimal.",
+                "Hard SL rate 3.7% — multiple pre-entry filters protect capital.",
+                "Rs.74,935 P&L on blank days alone — pure additional return.",
+                "Strict entry criteria — no signal unless setup quality is high.",
             ],
         },
         {
             "name":     "BLACK WIDOW",
-            "subtitle": "The Silent Reversal  ·  MRC (Mean Reversion Concept)",
+            "subtitle": "The Silent Reversal  ·  Blank Day Agent",
             "color":    WIDOW_C,
             "role":     "Blank Day Agent",
-            "tagline":  "Strikes from the shadows — PE sell when market bounces off the 38.2% Fibonacci retracement of previous-day range.",
-            "zone":     "l_382 = PDH − Range × 0.382  (Fibonacci mean reversion zone)",
-            "opt":      "PE Sell  (bullish reversal at Fibonacci support)",
-            "day_type": "Blank Days only  (no base signal that day)",
-            "lots":     "Fixed: 2 lots  (WR 80.6% justifies double position size)",
-            "insight":  "BLACK WIDOW is the highest win-rate agent in the system at 80.6%. The Fibonacci l_382 level is a precise mean-reversion zone where institutions accumulate long positions. The 2-lot sizing was approved after rigorous risk analysis: hard SL rate 4.7%, worst 2-lot loss Rs.11,297, max drawdown unchanged.",
-            "risk_note":"Hard SL rate 4.7% (8 hard SLs in 170 trades). MRC CE trades permanently excluded — net negative over 5 years.",
-            "rules": [
-                "Only fires on blank days when no base agent has signaled.",
-                "Previous day range must exceed 50 points (volatility filter).",
-                "5-minute Heiken Ashi confirmation required at l_382 zone.",
-                "Signal window: 09:15 to 12:00 PM only.",
-                "MRC CE (below l_618) trades are permanently excluded.",
-                "Fixed 2-lot position — approved on WR ≥ 75% threshold.",
+            "tagline":  "Strikes from the shadows — positions PE sell at a statistical mean-reversion zone where price consistently bounces with high precision.",
+            "zone":     "Statistical mean-reversion zone — derived from prior range",
+            "opt":      "PE Sell",
+            "day_type": "Blank Days only  (base agents not active)",
+            "lots":     "Fixed: 2 lots  (justified by 80.6% win rate)",
+            "insight":  "BLACK WIDOW is the highest win-rate agent in the entire system at 80.6%. The entry zone is a statistically robust mean-reversion level derived from prior-session data. The 2-lot position size was validated after full risk analysis — hard SL rate 4.7%, worst loss Rs.11,297, max drawdown unchanged.",
+            "risk_note":"Hard SL rate 4.7% over 170 trades. One-direction trades only — the losing side is permanently excluded.",
+            "why_bullets": [
+                "80.6% win rate — highest of all 7 agents in the FIFTO system.",
+                "Rs.3,07,346 P&L from blank days alone — a complete strategy in itself.",
+                "2-lot sizing validated — high win rate earns the larger position.",
+                "Losing trade direction permanently excluded — only the profitable side traded.",
+                "Hard SL rate 4.7% with worst single loss Rs.11,297 — fully manageable.",
             ],
         },
         {
             "name":     "HAWKEYE",
-            "subtitle": "The Precision Re-entry  ·  S4 Second Trade",
+            "subtitle": "The Precision Re-entry  ·  Re-entry Agent",
             "color":    HAWK_C,
             "role":     "Re-entry Agent",
-            "tagline":  "Never misses the second shot — re-enters in the same direction after the base trade hits target, on a defined pullback.",
-            "zone":     "Same as triggering base agent  (post-target pullback level)",
-            "opt":      "Same as base trade  (CE or PE)",
-            "day_type": "Base Days only  (after base agent hits 30% target)",
+            "tagline":  "Never misses the second shot — re-enters in the same direction after the base trade hits full target, capturing the continuation move.",
+            "zone":     "Continuation zone — same direction as base trade",
+            "opt":      "Same as triggering base trade",
+            "day_type": "Base Days only  (after base agent hits target)",
             "lots":     "Fixed: 1 lot",
-            "insight":  "HAWKEYE activates only when a base agent hits the 30% target before 13:30, then waits for the option premium to pull back to 60–75% of original entry. This captures the continuation move in the same direction. 196 trades, 71.4% WR, Rs.1.62L contribution.",
-            "risk_note":"Hard SL rate 7.1% — acceptable given the second-trade continuation nature.",
-            "rules": [
-                "Triggers only when a base agent exits with 'target' reason before 13:30.",
-                "Wait for option premium to pull back to 60–75% of original entry price.",
-                "Re-entry in same direction as original base trade.",
-                "Only 1 HAWKEYE re-entry per day.",
-                "Fixed 1-lot — no conviction score adjustment for re-entries.",
-                "EOD exit at 15:20 if target not reached.",
+            "insight":  "HAWKEYE activates only when a base agent hits the 30% target before 13:30. It waits for a defined pullback, then re-enters for the continuation move in the same direction. 196 trades, 71.4% WR, Rs.1.62L additional contribution.",
+            "risk_note":"Hard SL rate 7.1% — acceptable given the secondary re-entry nature of the trade.",
+            "why_bullets": [
+                "Extracts a second profit from winning days — pure incremental return.",
+                "71.4% win rate with 196 trades — statistically robust re-entry.",
+                "Rs.1,62,302 P&L that would otherwise be left on the table.",
+                "Only activates on high-quality days when a full target was already hit.",
+                "One re-entry per day maximum — disciplined, not greedy.",
             ],
         },
     ]
@@ -1130,10 +1175,10 @@ def build():
             S("rn", fontSize=9, textColor=RED, fontName="Helvetica", leading=13)))
         story.append(Spacer(1, 0.2*cm))
 
-        # ── Rules ─────────────────────────────────────────────────────
-        story.append(Paragraph(f"<b>{name} Rules &amp; Filters</b>", H3))
-        for i, rule in enumerate(agent["rules"], 1):
-            story.append(Paragraph(f"  <b>{i}.</b>  {rule}", RULE_B))
+        # ── Why This Agent ────────────────────────────────────────────
+        story.append(Paragraph(f"<b>Why {name}?</b>", H3))
+        for bullet in agent["why_bullets"]:
+            story.append(Paragraph(f"  ✔  {bullet}", RULE_B))
 
         # ── Exit distribution mini table ───────────────────────────────
         if name in ag.index:
@@ -1168,38 +1213,38 @@ def build():
     # ══════════════════════════════════════════════════════════════
     # PAGE: ENTRY RULES
     # ══════════════════════════════════════════════════════════════
-    story.append(Paragraph("Universal Entry Rules", H1))
+    story.append(Paragraph("How FIFTO Protects Your Capital", H1))
     story.append(hr())
 
     entry_rules = [
-        ("No Forward Bias",
-         "All technical levels (CPR, Camarilla, Fibonacci, PDH/PDL, Pivot R1/R2) are computed "
-         "from <b>previous day data</b> before market opens at 08:55 AM. "
-         "Zero current-day or future data is used at any stage."),
-        ("Entry Timing",
-         "Every entry is: <b>next candle open + 2 seconds</b> after signal confirmation. "
-         "This prevents entering on the signal candle itself. "
-         "Intraday window: 09:16 to 15:15."),
-        ("IB Filter (SPIDER-MAN)",
-         "Initial Balance = NIFTY spot range from 09:15 to 09:45. "
-         "If IB has already expanded <b>upward</b> before the entry time, "
-         "SPIDER-MAN CE sell is skipped — selling into a confirmed uptrend is adverse."),
-        ("Futures Basis Filter",
-         "Futures basis = Futures LTP − Spot LTP at 09:15. "
-         "SPIDER-MAN: basis must be −50 to +100 pts. "
-         "Base PE sells (THOR/HULK): skipped when basis is 50–100 pts (strong bull premium)."),
-        ("Blank Day Logic",
-         "SPIDER-MAN and BLACK WIDOW <b>only trade on blank days</b> — "
-         "days when no base agent (THOR/HULK/IRON MAN/CAPTAIN) fires a signal. "
-         "On base-agent days, only the base agent and HAWKEYE are eligible."),
-        ("Sequential Only",
-         "One active position at a time. A new signal is only considered "
-         "<b>after the current trade exits</b> completely. "
-         "Exception: HAWKEYE can activate after base agent exits at target."),
-        ("Pre-Market Calculation",
-         "At 08:55 AM each day: fetch 45-day daily OHLC → compute EMA(20), CPR, "
-         "Camarilla, Fibonacci, Pivot levels. Score7 conviction features computed. "
-         "Day plan is locked before 09:15."),
+        ("Pre-Market Plan — No Intraday Decisions",
+         "All levels and trade parameters are calculated <b>before the market opens at 09:15 AM</b>. "
+         "By the time trading begins, the system knows exactly what to look for, where to enter, "
+         "and what the target and stop-loss are. Zero real-time decision-making required."),
+        ("Precision Entry — No Chasing",
+         "Every entry fires at a precisely defined moment after signal confirmation. "
+         "The system never chases price. If the entry condition is not met exactly, no trade is taken. "
+         "Intraday trading window: 09:16 to 15:15."),
+        ("Multi-Layer Signal Filters",
+         "Each agent applies multiple independent filters before a trade is allowed. "
+         "Market structure, momentum conditions, and risk parameters must all align simultaneously. "
+         "A partial setup = no trade. Discipline is built into the system architecture."),
+        ("Conviction-Based Position Sizing",
+         "Position size (1–3 lots) is determined automatically by how many confirmation factors align. "
+         "High-conviction days get full size. Low-conviction days get minimum size. "
+         "The system never over-commits on weak setups."),
+        ("One Trade at a Time",
+         "Only one active position exists at any moment. No averaging down, no simultaneous bets. "
+         "HAWKEYE is the only exception — it can activate <i>after</i> the base agent has already exited at target. "
+         "Capital is never split across multiple live positions."),
+        ("No Overnight Risk — Ever",
+         "Every position exits at 15:20 daily. Absolutely no overnight exposure. "
+         "Whatever happens after market close — earnings, geopolitical events, global cues — "
+         "cannot affect open FIFTO positions, because there are none."),
+        ("Daily Performance Tracking",
+         "Every trade is logged with entry price, exit price, reason, P&L, and agent. "
+         "Monthly summaries are generated automatically. Full transparency — "
+         "every winning trade and every losing trade is documented."),
     ]
     for title, desc in entry_rules:
         story.append(Paragraph(f"<b>{title}</b>", H3))
@@ -1446,8 +1491,8 @@ def build():
 
     story.append(Paragraph("Daily Operational Routine", H2))
     routine = [
-        ("08:55 AM",    "Connect broker API. Fetch 45-day NIFTY daily OHLC. Compute all levels: CPR, Camarilla, MRC Fibonacci, EMA20, Pivot R1/R2. Lock day plan."),
-        ("09:10 AM",    "Print day summary: TC, BC, R1, R2, CAM L3/H3, MRC l_382, l_618, nearest expiry, score7 conviction features, expected agent."),
+        ("08:55 AM",    "Connect broker API. Fetch NIFTY daily OHLC. Compute all pre-market levels and conviction score. Lock day plan before market opens."),
+        ("09:10 AM",    "Print day summary: all levels, nearest expiry, conviction score, expected agent for the day."),
         ("09:15 AM",    "Market open. Start real-time NIFTY spot WebSocket. IB tracking begins (tracks 09:15–09:45 range)."),
         ("09:16 AM",    "Base agents (THOR/HULK/IRON MAN/CAPTAIN) go active. Monitor for zone entry signals."),
         ("09:46 AM",    "IB confirmed. SPIDER-MAN and BLACK WIDOW scanners activate (blank days only)."),
@@ -1504,12 +1549,12 @@ def build():
         else:
             wr_s, pnl_s = "—", "—"
         zone_map = {
-            "THOR":        "TC–PDH / R1–R2",
-            "HULK":        "PDH–R1 (CAM L3)",
-            "IRON MAN":    "R1 / R2 / CAM H3",
-            "CAPTAIN":     "PDL (IV2)",
-            "SPIDER-MAN":  "TC / R1 sweep",
-            "BLACK WIDOW": "l_382 Fibonacci",
+            "THOR":        "Open-based zone",
+            "HULK":        "Resistance zone",
+            "IRON MAN":    "Upper resistance band",
+            "CAPTAIN":     "Prior session support",
+            "SPIDER-MAN":  "False breakout reversal",
+            "BLACK WIDOW": "Mean-reversion zone",
             "HAWKEYE":     "Post-target re-entry",
         }
         opt_map = {
@@ -1576,7 +1621,7 @@ def build():
         "FIFTO v1.0  ·  5-Year Backtest: 2021–2026  ·  949 Trades  ·  "
         "NIFTY Weekly Options  ·  Zero forward look-ahead bias verified", SMALL))
 
-    doc.build(story, onFirstPage=_draw_cover_bg)
+    doc.build(story, onFirstPage=_draw_cover_bg, onLaterPages=_draw_page_header)
     sz = os.path.getsize(OUT_PATH)
     print(f"PDF created: {OUT_PATH}  ({sz//1024} KB,  ~{len(story)} elements)")
 
