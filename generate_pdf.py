@@ -93,8 +93,8 @@ SMALL  = S("small", fontSize=8.5, textColor=SILVER, fontName="Helvetica",
            leading=12, spaceBefore=2)
 RULE_B = S("rule", fontSize=10, textColor=DARK_GREY, fontName="Helvetica",
            leading=16, spaceBefore=2, spaceAfter=2, leftIndent=12)
-AGENT_T = S("at", fontSize=18, textColor=WHITE, fontName="Helvetica-Bold",
-             leading=24, alignment=TA_LEFT)
+AGENT_T = S("at", fontSize=14, textColor=WHITE, fontName="Helvetica-Bold",
+             leading=18, alignment=TA_LEFT)
 AGENT_S = S("asub", fontSize=10, textColor=MID_GREY, fontName="Helvetica-Oblique",
              leading=14, alignment=TA_LEFT)
 
@@ -449,7 +449,23 @@ def buf_to_rl_image(buf, width_cm, height_cm=None):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SECTION 4 — BUILD
+# SECTION 4 — PAGE CALLBACKS
+# ─────────────────────────────────────────────────────────────────────────────
+def _draw_cover_bg(canvas, doc):
+    """Full-page dark background + gold accent bars for cover page."""
+    canvas.saveState()
+    canvas.setFillColor(DARK)
+    canvas.rect(0, 0, W, H, fill=1, stroke=0)
+    # top gold bar (full width, above margins)
+    canvas.setFillColor(GOLD)
+    canvas.rect(0, H - 6, W, 6, fill=1, stroke=0)
+    # bottom gold bar
+    canvas.rect(0, 0, W, 6, fill=1, stroke=0)
+    canvas.restoreState()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 5 — BUILD
 # ─────────────────────────────────────────────────────────────────────────────
 def build():
     df, ag, yr_g, monthly, max_dd = load_stats()
@@ -485,65 +501,116 @@ def build():
     story = []
 
     # ══════════════════════════════════════════════════════════════
-    # PAGE 1 — COVER
+    # PAGE 1 — COVER  (dark background drawn by _draw_cover_bg)
     # ══════════════════════════════════════════════════════════════
-    def cover_cell(label, value):
-        return Table([[
-            Paragraph(label, COVER_STAT_LABEL),
-            Paragraph(value, COVER_STAT_VAL),
-        ]], colWidths=[4*cm, 3.5*cm], rowHeights=[1.4*cm])
+    story.append(Spacer(1, 1.6*cm))
 
-    stat_boxes = Table([
-        [
-            Paragraph("TOTAL P&amp;L", COVER_STAT_LABEL),
-            Paragraph("WIN RATE",      COVER_STAT_LABEL),
-            Paragraph("MAX DD",        COVER_STAT_LABEL),
-            Paragraph("COVERAGE",      COVER_STAT_LABEL),
-        ],
-        [
-            Paragraph("Rs.16,96,299", COVER_STAT_VAL),
-            Paragraph("74.5%",        COVER_STAT_VAL),
-            Paragraph("2.93%",        COVER_STAT_VAL),
-            Paragraph("65.2%",        COVER_STAT_VAL),
-        ],
-    ], colWidths=[4.5*cm, 3*cm, 4.5*cm, 4*cm], rowHeights=[0.8*cm, 1.1*cm])
-    stat_boxes.setStyle(TableStyle([
+    story.append(HRFlowable(width="100%", thickness=2.5, color=GOLD,
+                             hAlign="CENTER", spaceAfter=0.7*cm))
+
+    story.append(Paragraph("FIFTO",
+        S("cv_t", fontSize=68, textColor=GOLD, alignment=TA_CENTER,
+          fontName="Helvetica-Bold", leading=76, spaceAfter=6)))
+
+    story.append(Paragraph("Fusion Intraday Formula for Tactical Options",
+        S("cv_s", fontSize=16, textColor=WHITE, alignment=TA_CENTER,
+          fontName="Helvetica", leading=22, spaceAfter=0)))
+
+    story.append(Spacer(1, 0.5*cm))
+
+    story.append(Paragraph(
+        "NIFTY Weekly Options  ·  Intraday Option Selling System",
+        S("cv_tag1", fontSize=11, textColor=SILVER, alignment=TA_CENTER,
+          fontName="Helvetica-Oblique", leading=16)))
+
+    story.append(Spacer(1, 0.2*cm))
+
+    story.append(Paragraph(
+        "5-Year Verified Performance  ·  2021–2026  ·  949 Trades",
+        S("cv_tag2", fontSize=11, textColor=SILVER, alignment=TA_CENTER,
+          fontName="Helvetica-Oblique", leading=16)))
+
+    story.append(Spacer(1, 0.7*cm))
+
+    story.append(HRFlowable(width="65%", thickness=1, color=GOLD,
+                             hAlign="CENTER", spaceAfter=0.25*cm))
+    story.append(Paragraph("— The Avengers of the Market —",
+        S("cv_av", fontSize=13, textColor=GOLD, alignment=TA_CENTER,
+          fontName="Helvetica-Bold", leading=18)))
+    story.append(HRFlowable(width="65%", thickness=1, color=GOLD,
+                             hAlign="CENTER", spaceAfter=0.8*cm))
+
+    # 7 agent emblems in a row
+    _emb_cw = 16.2 * cm / 7
+    _cv_emb_row = [buf_to_rl_image(emblem_bufs[n], 1.9, 1.9)
+                   for n, _, _, _ in EMBLEMS]
+    _cv_name_row = [
+        Paragraph(f"<font color='{c}'><b>{n}</b></font>",
+                  S(f"cvn{i}", fontSize=7, fontName="Helvetica-Bold",
+                    textColor=colors.HexColor(c), alignment=TA_CENTER, leading=9))
+        for i, (n, c, _, _) in enumerate(EMBLEMS)
+    ]
+    _cv_emb_tbl = Table(
+        [_cv_emb_row, _cv_name_row],
+        colWidths=[_emb_cw] * 7,
+        rowHeights=[2.05*cm, 0.45*cm])
+    _cv_emb_tbl.setStyle(TableStyle([
         ("ALIGN",         (0,0), (-1,-1), "CENTER"),
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0), (-1,-1), 2),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+    ]))
+    story.append(_cv_emb_tbl)
+    story.append(Spacer(1, 0.9*cm))
+
+    # Key stats row
+    _cvl = S("cvl", fontSize=9,  textColor=SILVER, alignment=TA_CENTER,
+              fontName="Helvetica-Bold", leading=12)
+    _cvv = S("cvv", fontSize=18, textColor=GOLD,   alignment=TA_CENTER,
+              fontName="Helvetica-Bold", leading=22)
+    _cv_stats = Table(
+        [[Paragraph("TOTAL P&amp;L", _cvl),
+          Paragraph("WIN RATE",       _cvl),
+          Paragraph("MAX DRAWDOWN",   _cvl),
+          Paragraph("COVERAGE",       _cvl)],
+         [Paragraph("Rs.16,96,299",   _cvv),
+          Paragraph("74.5%",          _cvv),
+          Paragraph("2.93%",          _cvv),
+          Paragraph("65.2%",          _cvv)]],
+        colWidths=[4.5*cm, 3.5*cm, 4.5*cm, 3.7*cm],
+        rowHeights=[0.75*cm, 1.35*cm])
+    _cv_stats.setStyle(TableStyle([
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("LINEBELOW",     (0,0), (-1,0), 0.5, colors.HexColor("#444444")),
+        ("LINEAFTER",     (0,0), (2,-1), 0.5, colors.HexColor("#444444")),
+        ("BOX",           (0,0), (-1,-1), 1,   colors.HexColor("#555555")),
         ("TOPPADDING",    (0,0), (-1,-1), 4),
         ("BOTTOMPADDING", (0,0), (-1,-1), 4),
     ]))
+    story.append(_cv_stats)
+    story.append(Spacer(1, 0.7*cm))
 
-    cover_rows = [
-        [Spacer(1, 1.2*cm)],
-        [Paragraph("FIFTO", COVER_TITLE)],
-        [Paragraph("Fusion Intraday Formula for Tactical Options", COVER_SUB)],
-        [Spacer(1, 0.4*cm)],
-        [Paragraph("NIFTY Weekly Options  ·  Intraday Option Selling System", COVER_TAG)],
-        [Spacer(1, 0.3*cm)],
-        [Paragraph("5-Year Verified Performance  ·  2021–2026  ·  949 Trades", COVER_TAG)],
-        [Spacer(1, 1.0*cm)],
-        [Paragraph("- - -  The Avengers of the Market  - - -", COVER_TAG)],
-        [Spacer(1, 0.5*cm)],
-        [Paragraph("7 Agents  ·  7 Zones  ·  One Systematic Framework", COVER_TAG)],
-        [Spacer(1, 1.0*cm)],
-        [stat_boxes],
-        [Spacer(1, 0.8*cm)],
-        [Paragraph("3 of 58 months negative  ·  Zero overnight holding  ·  Fully mechanical execution", COVER_TAG)],
-        [Spacer(1, 1.4*cm)],
-        [Paragraph("Confidential  ·  For Authorized Recipients Only", SMALL)],
-        [Spacer(1, 0.6*cm)],
-    ]
-    cover_tbl = Table([[r[0]] for r in cover_rows], colWidths=[16*cm])
-    cover_tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0), (-1,-1), DARK),
-        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
-        ("TOPPADDING",    (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-        ("LEFTPADDING",   (0,0), (-1,-1), 20),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 20),
-    ]))
-    story.append(cover_tbl)
+    story.append(Paragraph(
+        "3 of 58 months negative  ·  Zero overnight holding  ·  Fully mechanical execution",
+        S("cv_3neg", fontSize=10, textColor=SILVER, alignment=TA_CENTER,
+          fontName="Helvetica-Oblique", leading=15)))
+
+    story.append(Spacer(1, 0.6*cm))
+
+    story.append(Paragraph("7 Agents  ·  7 Zones  ·  One Systematic Framework",
+        S("cv_7a", fontSize=11, textColor=SILVER, alignment=TA_CENTER,
+          fontName="Helvetica", leading=16)))
+
+    story.append(Spacer(1, 3.2*cm))
+
+    story.append(HRFlowable(width="100%", thickness=2.5, color=GOLD,
+                             hAlign="CENTER", spaceAfter=0.4*cm))
+
+    story.append(Paragraph("Confidential  ·  For Authorized Recipients Only",
+        S("cv_conf", fontSize=9, textColor=SILVER, alignment=TA_CENTER,
+          fontName="Helvetica", leading=13)))
+
     story.append(PageBreak())
 
     # ══════════════════════════════════════════════════════════════
@@ -905,7 +972,7 @@ def build():
             Paragraph(f"<font color='#F0B90B'>{agent['role']}</font>",
                       S("ar", fontSize=9, textColor=GOLD, fontName="Helvetica-Bold",
                         leading=13, alignment=TA_RIGHT)),
-        ]], colWidths=[4*cm, 8*cm, 4*cm])
+        ]], colWidths=[5*cm, 7*cm, 4*cm])
         hdr.setStyle(TableStyle([
             ("BACKGROUND",    (0,0), (-1,-1), clr),
             ("TOPPADDING",    (0,0), (-1,-1), 12),
@@ -1063,8 +1130,6 @@ def build():
             ex_d_tbl.setStyle(ex_d_ts)
             story.append(ex_d_tbl)
 
-        story.append(Spacer(1, 0.15*cm))
-        story.append(hr_thin())
         story.append(PageBreak())
 
     # ══════════════════════════════════════════════════════════════
@@ -1107,10 +1172,10 @@ def build():
         story.append(Paragraph(f"<b>{title}</b>", H3))
         story.append(Paragraph(desc, BODY))
         story.append(Spacer(1, 0.08*cm))
-    story.append(PageBreak())
+    story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
-    # PAGE: EXIT RULES
+    # EXIT RULES  (continues from Entry Rules)
     # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Universal Exit Rules", H1))
     story.append(hr())
@@ -1168,10 +1233,10 @@ def build():
     story.append(Spacer(1, 0.3*cm))
     story.append(Paragraph(
         "<b>5-year exit distribution:</b> Target 63.5% · Trail SL 9.0% · EOD 20.7% · Hard SL 6.8%", BODY))
-    story.append(PageBreak())
+    story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
-    # PAGE: CONVICTION SCORING
+    # CONVICTION SCORING  (continues from Exit Rules)
     # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Conviction Scoring — Lot Sizing Framework", H1))
     story.append(hr())
@@ -1196,7 +1261,7 @@ def build():
     story.append(sc_tbl)
     story.append(Spacer(1, 0.4*cm))
 
-    story.append(Paragraph("Score to Lot Size Mapping", H2))
+    _lot_h2 = Paragraph("Score to Lot Size Mapping", H2)
     lot_data = [
         ["Score",        "Base Lots", "Inside CPR?", "Final Lots", "Meaning"],
         ["0 – 1",        "1",         "Any",         "1",          "Low conviction — minimum exposure"],
@@ -1215,11 +1280,11 @@ def build():
     lt_ts.add("TEXTCOLOR",  (3,6), (3,6), RED)
     lt_ts.add("FONTNAME",   (3,6), (3,6), "Helvetica-Bold")
     lt_tbl.setStyle(lt_ts)
-    story.append(lt_tbl)
-    story.append(PageBreak())
+    story.append(KeepTogether([_lot_h2, lt_tbl]))
+    story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
-    # PAGE: PERFORMANCE DETAIL
+    # PERFORMANCE DETAIL  (continues after Conviction Scoring)
     # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Detailed Performance — 5-Year Breakdown", H1))
     story.append(hr())
@@ -1278,10 +1343,10 @@ def build():
     ms_tbl = Table(monthly_stats, colWidths=[5*cm, 11*cm])
     ms_tbl.setStyle(tblstyle(DARK_GREY))
     story.append(ms_tbl)
-    story.append(PageBreak())
+    story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
-    # PAGE: RISK MANAGEMENT
+    # RISK MANAGEMENT  (continues from Performance Detail)
     # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Risk Management", H1))
     story.append(hr())
@@ -1319,7 +1384,6 @@ def build():
         story.append(Spacer(1, 0.08*cm))
 
     story.append(Spacer(1, 0.3*cm))
-    story.append(Paragraph("Drawdown Profile", H2))
     dd_data = [
         ["Metric",               "Value"],
         ["Maximum Drawdown",     "Rs. 46,134  (2.93% of peak equity)"],
@@ -1331,11 +1395,12 @@ def build():
     ]
     dd_tbl = Table(dd_data, colWidths=[5*cm, 11*cm])
     dd_tbl.setStyle(tblstyle(DARK))
+    story.append(Paragraph("Drawdown Profile", H2))
     story.append(dd_tbl)
-    story.append(PageBreak())
+    story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
-    # PAGE: PAPER TRADING PLAN
+    # PAPER TRADING PLAN  (follows Risk Management on same page flow)
     # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Paper Trading Plan — Getting Started", H1))
     story.append(hr())
@@ -1386,10 +1451,10 @@ def build():
     api_tbl = Table(api_data, colWidths=[2.5*cm, 3.5*cm, 4.0*cm, 6.0*cm])
     api_tbl.setStyle(tblstyle(DARK))
     story.append(api_tbl)
-    story.append(PageBreak())
+    story.append(Spacer(1, 0.5*cm))
 
     # ══════════════════════════════════════════════════════════════
-    # FINAL PAGE — QUICK REFERENCE
+    # QUICK REFERENCE  (continues from Paper Trading)
     # ══════════════════════════════════════════════════════════════
     story.append(Paragraph("Quick Reference Card", H1))
     story.append(hr())
@@ -1442,7 +1507,7 @@ def build():
     story.append(qr_tbl)
     story.append(Spacer(1, 0.4*cm))
 
-    story.append(Paragraph("Exit Cheat Sheet", H2))
+    _ex_h2 = Paragraph("Exit Cheat Sheet", H2)
     ex_data = [
         ["Trigger",                   "Action",                    "Result"],
         ["ep × 0.70",                 "EXIT — Target hit",         "+30% of entry premium"],
@@ -1470,14 +1535,14 @@ def build():
         ("BOTTOMPADDING", (0,0), (-1,-1), 6),
     ])
     ex_tbl.setStyle(ex_ts)
-    story.append(ex_tbl)
+    story.append(KeepTogether([_ex_h2, ex_tbl]))
     story.append(Spacer(1, 0.4*cm))
 
     story.append(Paragraph(
         "FIFTO v1.0  ·  5-Year Backtest: 2021–2026  ·  949 Trades  ·  "
         "NIFTY Weekly Options  ·  Zero forward look-ahead bias verified", SMALL))
 
-    doc.build(story)
+    doc.build(story, onFirstPage=_draw_cover_bg)
     sz = os.path.getsize(OUT_PATH)
     print(f"PDF created: {OUT_PATH}  ({sz//1024} KB,  ~{len(story)} elements)")
 
