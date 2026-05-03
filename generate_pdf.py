@@ -78,8 +78,8 @@ COVER_TAG   = S("ctag", fontSize=11, textColor=SILVER, alignment=TA_CENTER,
                 fontName="Helvetica-Oblique", leading=17)
 COVER_STAT_LABEL = S("csl", fontSize=9, textColor=SILVER, alignment=TA_CENTER,
                      fontName="Helvetica-Bold", leading=13)
-COVER_STAT_VAL   = S("csv", fontSize=20, textColor=GOLD, alignment=TA_CENTER,
-                     fontName="Helvetica-Bold", leading=24)
+COVER_STAT_VAL   = S("csv", fontSize=14, textColor=GOLD, alignment=TA_CENTER,
+                     fontName="Helvetica-Bold", leading=18)
 
 H1 = S("h1", fontSize=22, textColor=GOLD, fontName="Helvetica-Bold",
         leading=28, spaceBefore=12, spaceAfter=6)
@@ -495,18 +495,18 @@ def build():
 
     stat_boxes = Table([
         [
-            Paragraph("TOTAL P&L",  COVER_STAT_LABEL),
-            Paragraph("WIN RATE",   COVER_STAT_LABEL),
-            Paragraph("MAX DD",     COVER_STAT_LABEL),
-            Paragraph("COVERAGE",   COVER_STAT_LABEL),
+            Paragraph("TOTAL P&amp;L", COVER_STAT_LABEL),
+            Paragraph("WIN RATE",      COVER_STAT_LABEL),
+            Paragraph("MAX DD",        COVER_STAT_LABEL),
+            Paragraph("COVERAGE",      COVER_STAT_LABEL),
         ],
         [
-            Paragraph("Rs.16,96,299",COVER_STAT_VAL),
-            Paragraph("74.5%",       COVER_STAT_VAL),
-            Paragraph("2.93%",       COVER_STAT_VAL),
-            Paragraph("65.2%",       COVER_STAT_VAL),
+            Paragraph("Rs.16,96,299", COVER_STAT_VAL),
+            Paragraph("74.5%",        COVER_STAT_VAL),
+            Paragraph("2.93%",        COVER_STAT_VAL),
+            Paragraph("65.2%",        COVER_STAT_VAL),
         ],
-    ], colWidths=[4*cm]*4, rowHeights=[0.8*cm, 1.1*cm])
+    ], colWidths=[4.5*cm, 3*cm, 4.5*cm, 4*cm], rowHeights=[0.8*cm, 1.1*cm])
     stat_boxes.setStyle(TableStyle([
         ("ALIGN",         (0,0), (-1,-1), "CENTER"),
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
@@ -523,7 +523,7 @@ def build():
         [Spacer(1, 0.3*cm)],
         [Paragraph("5-Year Verified Performance  ·  2021–2026  ·  949 Trades", COVER_TAG)],
         [Spacer(1, 1.0*cm)],
-        [Paragraph("── The Avengers of the Market ──", COVER_TAG)],
+        [Paragraph("- - -  The Avengers of the Market  - - -", COVER_TAG)],
         [Spacer(1, 0.5*cm)],
         [Paragraph("7 Agents  ·  7 Zones  ·  One Systematic Framework", COVER_TAG)],
         [Spacer(1, 1.0*cm)],
@@ -575,6 +575,42 @@ def build():
     for i, (title, desc) in enumerate(principles, 1):
         story.append(Paragraph(f"<b>{i}. {title}:</b> {desc}", RULE_B))
         story.append(Spacer(1, 0.1*cm))
+
+    story.append(Spacer(1, 0.5*cm))
+    story.append(Paragraph("System at a Glance", H2))
+    glance_data = [
+        ["Metric",                "Value",         "Metric",                "Value"],
+        ["Total Trades",          "949",           "Trading Instrument",    "NIFTY Weekly Options"],
+        ["Win Rate",              "74.5%",         "Trade Type",            "Option Sell (Short Premium)"],
+        ["Total PnL (5yr)",       "Rs.16,96,299",  "Lot Size",              "65 shares / lot"],
+        ["Avg Monthly PnL",       "Rs.29,247",     "Max Lots per Trade",    "3 lots"],
+        ["Max Drawdown",          "2.93%",         "Hard SL Trigger",       "Premium doubles (100% loss)"],
+        ["Negative Months",       "3 / 58",        "Target per Trade",      "30% of entry premium"],
+        ["Best Month",            "Rs.1,08,030",   "Entry Window",          "09:16 to 15:15"],
+        ["Return on Capital",     "~33.9% p.a.",   "EOD Exit",              "15:20:00 — no overnight"],
+    ]
+    glance_tbl = Table(glance_data,
+                       colWidths=[3.8*cm, 3.2*cm, 3.8*cm, 5.4*cm])
+    g_ts = TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0), DARK),
+        ("TEXTCOLOR",     (0,0), (-1,0), WHITE),
+        ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("FONTNAME",      (0,1), (-1,-1), "Helvetica"),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, LIGHT_GREY]),
+        ("BACKGROUND",    (2,1), (2,-1), MID_GREY),
+        ("FONTNAME",      (2,1), (2,-1), "Helvetica-Bold"),
+        ("FONTSIZE",      (2,1), (2,-1), 8.5),
+        ("GRID",          (0,0), (-1,-1), 0.4, colors.HexColor("#B0BEC5")),
+        ("ALIGN",         (0,0), (-1,-1), "LEFT"),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 8),
+    ])
+    glance_tbl.setStyle(g_ts)
+    story.append(glance_tbl)
     story.append(PageBreak())
 
     # ══════════════════════════════════════════════════════════════
@@ -669,11 +705,39 @@ def build():
     ov_ts.add("BOTTOMPADDING", (0,1), (-1,-1), 4)
     ov_tbl.setStyle(ov_ts)
     story.append(ov_tbl)
-    story.append(Spacer(1, 0.4*cm))
+    story.append(Spacer(1, 0.3*cm))
     story.append(Paragraph(
         "Base Days: THOR/HULK/IRON MAN/CAPTAIN active + HAWKEYE (if target before 13:30). "
         "Blank Days: SPIDER-MAN and BLACK WIDOW active. "
         "Coverage: 65.2% of 1,155 trading days.", SMALL))
+    story.append(Spacer(1, 0.4*cm))
+
+    story.append(Paragraph("Technical Level Computation Reference", H2))
+    story.append(Paragraph(
+        "All levels are calculated from <b>previous day OHLC</b> before market open at 08:55 AM. "
+        "No intraday or future data is used.", BODY))
+    story.append(Spacer(1, 0.2*cm))
+    level_ref = [
+        ["Variable",       "Formula",                          "Used By"],
+        ["Pivot (PP)",     "(H + L + C) / 3",                 "THOR, IRON MAN, CAPTAIN"],
+        ["BC",             "(H + L) / 2",                     "THOR"],
+        ["TC",             "2 × PP - BC",                     "THOR, SPIDER-MAN"],
+        ["R1",             "2 × PP - L",                      "IRON MAN, CAPTAIN, SPIDER-MAN"],
+        ["R2",             "PP + (H - L)",                    "IRON MAN, CAPTAIN"],
+        ["CAM L3",         "Close - Range × 0.275",           "HULK"],
+        ["CAM H3",         "Close + Range × 0.275",           "IRON MAN"],
+        ["MRC l_382",      "PDH - Range × 0.382",             "BLACK WIDOW (entry zone)"],
+        ["PDH / PDL",      "Previous Day High / Low",         "THOR, BLACK WIDOW / CAPTAIN"],
+        ["EMA (20-day)",   "Exponential MA of daily close",   "THOR (directional bias filter)"],
+        ["Futures Basis",  "Futures LTP - Spot LTP at 09:15","SPIDER-MAN, THOR, HULK basis filter"],
+        ["IB High/Low",    "Max/Min spot 09:15–09:45",        "SPIDER-MAN (IB expansion filter)"],
+    ]
+    ref_tbl = Table(level_ref, colWidths=[2.8*cm, 5.6*cm, 7.8*cm])
+    ref_ts = tblstyle(DARK, fs=8)
+    ref_ts.add("TOPPADDING",    (0,0), (-1,-1), 2)
+    ref_ts.add("BOTTOMPADDING", (0,0), (-1,-1), 2)
+    ref_tbl.setStyle(ref_ts)
+    story.append(ref_tbl)
     story.append(PageBreak())
 
     # ══════════════════════════════════════════════════════════════
@@ -794,7 +858,7 @@ def build():
             "zone":     "l_382 = PDH − Range × 0.382  (Fibonacci mean reversion zone)",
             "opt":      "PE Sell  (bullish reversal at Fibonacci support)",
             "day_type": "Blank Days only  (no base signal that day)",
-            "lots":     "<b>Fixed: 2 lots</b>  (WR 80.6% justifies double position size)",
+            "lots":     "Fixed: 2 lots  (WR 80.6% justifies double position size)",
             "insight":  "BLACK WIDOW is the highest win-rate agent in the system at 80.6%. The Fibonacci l_382 level is a precise mean-reversion zone where institutions accumulate long positions. The 2-lot sizing was approved after rigorous risk analysis: hard SL rate 4.7%, worst 2-lot loss Rs.11,297, max drawdown unchanged.",
             "risk_note":"Hard SL rate 4.7% (8 hard SLs in 170 trades). MRC CE trades permanently excluded — net negative over 5 years.",
             "rules": [
@@ -877,100 +941,129 @@ def build():
         stat_rows = [
             ["TRADES (5yr)",  str(t_cnt)],
             ["WIN RATE",      f"{wr_val:.1f}%"],
-            ["5yr P&L",       f"Rs.{total_v:,.0f}"],
+            ["5yr PnL",       f"Rs.{total_v:,.0f}"],
             ["AVG PER TRADE", f"Rs.{avg_v:,.0f}"],
             ["TARGET EXITS",  f"{tgt_pct:.1f}%"],
             ["HARD SL RATE",  f"{hsl_pct:.1f}%"],
         ]
+        # ── Top row: emblem (left) + stats table (right) ──────────────
         stat_tbl = Table(
             [[Paragraph(f"<b>{k}</b>",
-                        S("sk", fontSize=8, fontName="Helvetica-Bold",
-                          textColor=SILVER, leading=12)),
+                        S("sk", fontSize=9, fontName="Helvetica-Bold",
+                          textColor=SILVER, leading=13)),
               Paragraph(v,
-                        S("sv", fontSize=10, fontName="Helvetica-Bold",
+                        S("sv", fontSize=11, fontName="Helvetica-Bold",
                           textColor=DARK_GREY if k != "WIN RATE" else wr_color,
-                          leading=14, alignment=TA_RIGHT))]
+                          leading=15, alignment=TA_RIGHT))]
              for k, v in stat_rows],
-            colWidths=[3.0*cm, 2.5*cm])
+            colWidths=[4.2*cm, 3.5*cm])
         stat_tbl.setStyle(TableStyle([
             ("ROWBACKGROUNDS", (0,0), (-1,-1), [LIGHT_GREY, WHITE]),
             ("GRID",           (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
-            ("TOPPADDING",     (0,0), (-1,-1), 4),
-            ("BOTTOMPADDING",  (0,0), (-1,-1), 4),
-            ("LEFTPADDING",    (0,0), (-1,-1), 6),
-            ("RIGHTPADDING",   (0,0), (-1,-1), 6),
+            ("TOPPADDING",     (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING",  (0,0), (-1,-1), 5),
+            ("LEFTPADDING",    (0,0), (-1,-1), 8),
+            ("RIGHTPADDING",   (0,0), (-1,-1), 8),
             ("VALIGN",         (0,0), (-1,-1), "MIDDLE"),
         ]))
 
-        right_block = Table(
-            [[stat_tbl], [Spacer(1, 0.2*cm)], [gauge_img]],
-            colWidths=[5.8*cm])
-
-        # Tagline + zone details on left
-        left_block_items = [
-            Paragraph(f"<i>{agent['tagline']}</i>",
-                      S("tl", fontSize=9.5, textColor=SILVER, fontName="Helvetica-Oblique",
-                        leading=14, spaceAfter=6)),
-            Spacer(1, 0.15*cm),
-        ]
-        details = [
-            ("Zone",     agent["zone"]),
-            ("Trade",    agent["opt"]),
-            ("Days",     agent["day_type"]),
-            ("Lots",     agent["lots"]),
-        ]
-        det_tbl = Table(details, colWidths=[1.8*cm, 8.6*cm])
-        det_tbl.setStyle(TableStyle([
-            ("BACKGROUND",    (0,0), (0,-1), MID_GREY),
-            ("FONTNAME",      (0,0), (0,-1), "Helvetica-Bold"),
-            ("FONTSIZE",      (0,0), (-1,-1), 8.5),
-            ("FONTNAME",      (1,0), (1,-1), "Helvetica"),
-            ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
-            ("TOPPADDING",    (0,0), (-1,-1), 4),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-            ("LEFTPADDING",   (0,0), (-1,-1), 6),
-            ("VALIGN",        (0,0), (-1,-1), "TOP"),
-        ]))
-        left_block_items.append(det_tbl)
-        left_block_items.append(Spacer(1, 0.15*cm))
-        # Insight
-        left_block_items.append(
-            Paragraph(f"<b>Performance Insight:</b> {agent['insight']}",
-                      S("ins", fontSize=8.5, textColor=DARK_GREY, fontName="Helvetica",
-                        leading=13, alignment=TA_JUSTIFY)))
-        left_block_items.append(Spacer(1, 0.1*cm))
-        left_block_items.append(
-            Paragraph(f"<b>Risk Note:</b> {agent['risk_note']}",
-                      S("rn", fontSize=8.5, textColor=RED, fontName="Helvetica",
-                        leading=12)))
-
-        left_tbl = Table(
-            [[item] for item in left_block_items],
-            colWidths=[10.4*cm])
-        left_tbl.setStyle(TableStyle([
-            ("TOPPADDING",    (0,0), (-1,-1), 1),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 1),
+        # Gauge sits next to stat table
+        gauge_stat_row = Table(
+            [[stat_tbl, gauge_img]],
+            colWidths=[7.7*cm, 2.5*cm])
+        gauge_stat_row.setStyle(TableStyle([
+            ("VALIGN",  (0,0), (-1,-1), "MIDDLE"),
+            ("TOPPADDING",    (0,0), (-1,-1), 0),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 0),
             ("LEFTPADDING",   (0,0), (-1,-1), 0),
             ("RIGHTPADDING",  (0,0), (-1,-1), 0),
         ]))
 
-        content_tbl = Table([[left_tbl, emb_img, right_block]],
-                             colWidths=[10.4*cm, 3.4*cm, 2.4*cm])
-        content_tbl.setStyle(TableStyle([
-            ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        top_row = Table([[emb_img, gauge_stat_row]],
+                        colWidths=[3.4*cm, 12.8*cm])
+        top_row.setStyle(TableStyle([
+            ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
             ("TOPPADDING",    (0,0), (-1,-1), 0),
             ("BOTTOMPADDING", (0,0), (-1,-1), 0),
             ("LEFTPADDING",   (0,0), (-1,-1), 0),
-            ("RIGHTPADDING",  (0,0), (-1,-1), 4),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 0),
         ]))
-        story.append(content_tbl)
+        story.append(top_row)
+        story.append(Spacer(1, 0.25*cm))
+
+        # ── Tagline ──────────────────────────────────────────────────
+        story.append(Paragraph(f"<i>{agent['tagline']}</i>",
+                      S("tl", fontSize=10, textColor=SILVER, fontName="Helvetica-Oblique",
+                        leading=15)))
         story.append(Spacer(1, 0.2*cm))
 
-        # Rules
+        # ── Zone / Trade / Days / Lots table ─────────────────────────
+        details = [
+            ("Zone",  agent["zone"]),
+            ("Trade", agent["opt"]),
+            ("Days",  agent["day_type"]),
+            ("Lots",  agent["lots"]),
+        ]
+        det_tbl = Table(details, colWidths=[1.8*cm, 14.4*cm])
+        det_tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (0,-1), MID_GREY),
+            ("FONTNAME",      (0,0), (0,-1), "Helvetica-Bold"),
+            ("FONTSIZE",      (0,0), (-1,-1), 9),
+            ("FONTNAME",      (1,0), (1,-1), "Helvetica"),
+            ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CFD8DC")),
+            ("TOPPADDING",    (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ("LEFTPADDING",   (0,0), (-1,-1), 8),
+            ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ]))
+        story.append(det_tbl)
+        story.append(Spacer(1, 0.2*cm))
+
+        # ── Insight + Risk ────────────────────────────────────────────
+        story.append(Paragraph(
+            f"<b>Performance Insight:</b> {agent['insight']}",
+            S("ins", fontSize=9.5, textColor=DARK_GREY, fontName="Helvetica",
+              leading=14, alignment=TA_JUSTIFY)))
+        story.append(Spacer(1, 0.1*cm))
+        story.append(Paragraph(
+            f"<b>Risk Note:</b> {agent['risk_note']}",
+            S("rn", fontSize=9, textColor=RED, fontName="Helvetica", leading=13)))
+        story.append(Spacer(1, 0.2*cm))
+
+        # ── Rules ─────────────────────────────────────────────────────
         story.append(Paragraph(f"<b>{name} Rules &amp; Filters</b>", H3))
         for i, rule in enumerate(agent["rules"], 1):
             story.append(Paragraph(f"  <b>{i}.</b>  {rule}", RULE_B))
-        story.append(Spacer(1, 0.1*cm))
+
+        # ── Exit distribution mini table ───────────────────────────────
+        if name in ag.index:
+            a2 = ag.loc[name]
+            n  = int(a2["trades"])
+            target_n  = int(a2["target_n"])
+            hard_sl_n = int(a2["hard_sl"])
+            eod_n     = n - target_n - hard_sl_n - int(a2["target_pct"]*0/100)
+            # compute from raw df
+            agent_df  = df[df["agent"] == name]
+            eod_cnt   = int((agent_df["exit_reason"] == "eod").sum())
+            lock_cnt  = int((agent_df["exit_reason"] == "lockin_sl").sum())
+
+            story.append(Spacer(1, 0.3*cm))
+            story.append(Paragraph("Exit Breakdown", H3))
+            ex_dist = [
+                ["Exit Type", "Count", "% of Trades", "Typical Outcome"],
+                ["Target (-30%)",  str(target_n),  f"{target_n/n*100:.1f}%",  "Full profit booked"],
+                ["Lock-in SL",     str(lock_cnt),  f"{lock_cnt/n*100:.1f}%",  "Partial profit locked"],
+                ["EOD (15:20)",    str(eod_cnt),   f"{eod_cnt/n*100:.1f}%",   "Variable — time-based exit"],
+                ["Hard SL (+100%)",str(hard_sl_n), f"{hard_sl_n/n*100:.1f}%", "Full loss on entry premium"],
+            ]
+            ex_d_tbl = Table(ex_dist, colWidths=[4*cm, 2*cm, 3*cm, 7.2*cm])
+            ex_d_ts = tblstyle(colors.HexColor(color))
+            ex_d_ts.add("BACKGROUND", (0,1), (-1,1), GREEN_LIGHT)
+            ex_d_ts.add("BACKGROUND", (0,4), (-1,4), RED_LIGHT)
+            ex_d_tbl.setStyle(ex_d_ts)
+            story.append(ex_d_tbl)
+
+        story.append(Spacer(1, 0.15*cm))
         story.append(hr_thin())
         story.append(PageBreak())
 
