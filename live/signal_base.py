@@ -38,8 +38,10 @@ V17A_PARAMS = {
     ("within_cpr", "bull", "PE"): ("ATM",  "09:20:02", 0.30, 2.00),
 }
 
-CAM_L3_PARAMS = dict(opt="CE", stype="ITM1", tgt=0.20, sl=0.50)
-CAM_H3_PARAMS = dict(opt="PE", stype="OTM1", tgt=0.50, sl=1.00)
+# HULK:     spot bounces UP from L3 → PE loses value → sell PE ITM1
+# IRON MAN: spot rejects DOWN from H3 → CE loses value → sell CE OTM1
+CAM_L3_PARAMS = dict(opt="PE", stype="ITM1", tgt=0.20, sl=0.50)
+CAM_H3_PARAMS = dict(opt="CE", stype="OTM1", tgt=0.50, sl=1.00)
 IV2_PARAMS = {
     "PDL": dict(direction="down", opt="CE", stype="ATM", tgt=0.20, sl=0.50),
     "R1":  dict(direction="up",   opt="PE", stype="ATM", tgt=0.20, sl=0.50),
@@ -168,7 +170,10 @@ class BaseScanner:
         # THOR: scheduled entry
         if self._thor_signal and now >= self._thor_sched:
             sig = dict(self._thor_signal)
-            sig["lots"]  = self.get_lots(sig["opt"])
+            lots = self.get_lots(sig["opt"])
+            if lots == 0:   # score==6 quality cut
+                self._done = True; return None
+            sig["lots"]  = lots
             sig["score"] = self._score7(sig["opt"]).get("score", 0)
             logger.info("THOR: %s %s entry=%s lots=%d",
                         sig["zone"], sig["opt"], sig["entry_time"], sig["lots"])
