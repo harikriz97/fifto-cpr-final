@@ -414,9 +414,13 @@ def on_option_tick(message: dict, state: DayState, client: AngelClient):
     if not state.active_trade:
         return
 
+    # Write live state for dashboard every option tick
+    _write_live_state(state, price, time_str)
+
     result = state.active_trade.on_tick(time_str, price)
     if result:
         state.trade_entered = False
+        _clear_live_state()
         logger.info(
             f"Trade done. P&L: Rs.{result['pnl']:,.0f} | exit={result['exit_reason']}"
         )
@@ -492,6 +496,53 @@ def _apply_lot_boosts(signal: dict, state: DayState) -> dict:
     signal = dict(signal)   # don't mutate original
     signal["lots"] = lots
     return signal
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LIVE STATE — written every option tick for dashboard
+# ─────────────────────────────────────────────────────────────────────────────
+def _write_live_state(state: DayState, option_price: float, ts: str):
+    """Write current trade state to data/live_state.json for dashboard."""
+    try:
+        tm  = state.active_trade
+        sig = tm.signal if tm else {}
+        ep  = tm.ep if tm else 0
+        lots = sig.get("lots", 1) if sig else 1
+        decay_pct    = round((ep - option_price) / ep * 100, 1) if ep > 0 else 0
+        upnl         = round((ep - option_price) * lots * 65, 0) if ep > 0 else 0
+        data = dict(
+            symbol       = ("NIFTY" + state.expiry + str(sig.get("strike","")) + str(sig.get("opt",""))) if sig.get("strike") else "",
+            strategy     = sig.get("strategy",""),
+            signal       = sig.get("signal",""),
+            status       = "open",
+            entry        = ep,
+            current      = option_price,
+            spot         = state.last_spot_price,
+            sl           = tm.sl if tm else 0,
+            hard_sl      = tm.hsl if tm else 0,
+            target       = tm.tgt if tm else 0,
+            trail_tier   = tm.trail_tier if hasattr(tm,"trail_tier") else 0,
+            trail_label  = tm.trail_label() if hasattr(tm,"trail_label") else "None",
+            decay_pct    = decay_pct,
+            max_decay_pct= round(tm.max_decline * 100, 1) if tm else 0,
+            upnl         = upnl,
+            lots         = lots,
+            score        = sig.get("score", 0),
+            s4_watching  = state.s4_watching,
+            contra_watching = state.contra_watching,
+            ts           = ts,
+        )
+        import json as _j
+        path = os.path.join(DATA_DIR, "live_state.json")
+        with open(path, "w") as f: _j.dump(data, f)
+    except Exception as e:
+        logger.debug("live_state write failed: %s", e)
+
+def _clear_live_state():
+    try:
+        p = os.path.join(DATA_DIR, "live_state.json")
+        if os.path.exists(p): os.remove(p)
+    except Exception: pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
