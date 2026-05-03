@@ -535,9 +535,8 @@ def build():
     df, ag, yr_g, monthly, max_dd = load_stats()
 
     # Pre-generate charts once
-    equity_buf   = make_equity_chart(df)
-    monthly_buf  = make_monthly_chart(monthly)
-    cover_eq_buf = make_cover_equity(df)
+    equity_buf  = make_equity_chart(df)
+    monthly_buf = make_monthly_chart(monthly)
 
     # Agent emblem configs
     EMBLEMS = [
@@ -586,11 +585,6 @@ def build():
           fontName="Helvetica", leading=15)))
 
     story.append(Spacer(1, 0.5*cm))
-
-    # ── Equity curve (5-year, minimal, dark bg) ───────────────────────────────
-    story.append(buf_to_rl_image(cover_eq_buf, 16.2, 5.0))
-
-    story.append(Spacer(1, 0.45*cm))
 
     story.append(HRFlowable(width="85%", thickness=0.8, color=GOLD,
                              hAlign="CENTER", spaceAfter=0.35*cm))
@@ -653,7 +647,7 @@ def build():
         S("cv_tag3", fontSize=9, textColor=SILVER, alignment=TA_CENTER,
           fontName="Helvetica-Oblique", leading=14)))
 
-    story.append(Spacer(1, 2.2*cm))
+    story.append(Spacer(1, 7.5*cm))
 
     story.append(HRFlowable(width="100%", thickness=2.5, color=GOLD,
                              hAlign="CENTER", spaceAfter=0.4*cm))
@@ -874,7 +868,7 @@ def build():
         ])
 
     ov_tbl = Table(overview_rows,
-                   colWidths=[1.2*cm, 3.0*cm, 3.8*cm, 1.5*cm, 1.2*cm, 1.5*cm, 3.0*cm, 2.0*cm])
+                   colWidths=[1.2*cm, 3.0*cm, 3.6*cm, 1.5*cm, 1.2*cm, 1.5*cm, 3.0*cm, 2.0*cm])
     ov_ts = tblstyle(DARK)
     ov_ts.add("ROWBACKGROUNDS", (0,1), (-1,-1), [WHITE, LIGHT_GREY])
     ov_ts.add("ALIGN", (0,0), (-1,-1), "CENTER")
