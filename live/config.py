@@ -3,10 +3,10 @@ live/config.py — Angel One credentials + strategy parameters for paper_trader
 """
 
 # ── Angel One API Credentials ─────────────────────────────────────────────────
-ANGEL_API_KEY     = ""   # your Angel One API key
-ANGEL_CLIENT_ID   = ""   # your client ID (e.g. A123456)
-ANGEL_PASSWORD    = ""   # your Angel One PIN
-ANGEL_TOTP_SECRET = ""   # base32 TOTP secret
+ANGEL_API_KEY     = "k6S2VzNN"
+ANGEL_CLIENT_ID   = "pvip1030"
+ANGEL_PASSWORD    = "5131"
+ANGEL_TOTP_SECRET = "UJ2OEF4RVJQG3Q7JLRGKH4NZ3A"
 
 # ── Mode ──────────────────────────────────────────────────────────────────────
 PAPER_TRADE = True
@@ -36,6 +36,11 @@ SCORE_LOT_MAP = {0: 1, 1: 1, 2: 2, 3: 2, 4: 3, 5: 3, 6: 0, 7: 3}
 # ── MRC lot override ──────────────────────────────────────────────────────────
 MRC_PE_LOTS = 2
 MRC_CE_LOTS = 0
+
+# ── Telegram alerts ───────────────────────────────────────────────────────────
+# Get token from @BotFather. Get chat_id: python live/telegram_alert.py --setup
+TELEGRAM_TOKEN   = ""   # e.g. "7476365992:AAGK9c4K1..."
+TELEGRAM_CHAT_ID = ""   # e.g. "123456789"
 
 # ── Output paths ─────────────────────────────────────────────────────────────
 import os
